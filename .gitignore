@@ -1,0 +1,33 @@
+# Build outputs
+.vs/
+**/x64/
+**/Win32/
+**/bin/
+**/obj/
+*.pdb
+*.ilk
+*.exe
+*.dll
+*.lib
+*.obj
+*.tlog
+*.lastbuildstate
+
+# User/local files
+*.vcxproj.user
+*.csproj.user
+.codex/
+soa_parser_reference_bundle/
+
+# Parser generated outputs
+SoaSimFileParsing/blender_ir/
+SoaSimFileParsing/inputs_mld_only/
+SoaSimFileParsing/parsed_*/
+SoaSimFileParsing/decompressed_inputs/*
+!SoaSimFileParsing/decompressed_inputs/.gitignore
+SoaSimFileParsing/inputs/*
+!SoaSimFileParsing/inputs/.gitignore
+
+# Python/cache artifacts
+__pycache__/
+*.pyc
