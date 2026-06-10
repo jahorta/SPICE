@@ -17,6 +17,7 @@
 *.vcxproj.user
 *.csproj.user
 .codex/
+graphify-out/
 soa_parser_reference_bundle/
 AGENTS.md
 
