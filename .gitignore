@@ -19,6 +19,7 @@
 .codex/
 graphify-out/
 soa_parser_reference_bundle/
+SpiceSCT/validations/
 AGENTS.md
 
 # Parser generated outputs
