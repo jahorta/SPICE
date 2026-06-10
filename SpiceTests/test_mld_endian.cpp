@@ -1,4 +1,4 @@
-#include "../SoaSimMLD/SoaSimMLD.h"
+#include "../SpiceMLD/SpiceMLD.h"
 #include "../Compression/Aklz.h"
 
 #include <gtest/gtest.h>
@@ -15,10 +15,10 @@
 namespace {
 
 using spice::core::Endian;
-using soasim::mld::exporting::MldExportOptions;
-using soasim::mld::exporting::MldFileExporter;
-using soasim::mld::model::TargetPlatform;
-using soasim::mld::parsing::MldParser;
+using spice::mld::exporting::MldExportOptions;
+using spice::mld::exporting::MldFileExporter;
+using spice::mld::model::TargetPlatform;
+using spice::mld::parsing::MldParser;
 
 constexpr std::size_t kHeaderSize = 0x14U;
 constexpr std::size_t kEntryOffset = 0x20U;
@@ -200,9 +200,9 @@ TEST(MldEndian, GameCubeExportCanBeAklzCompressed) {
     const auto uncompressed = exporter.exportFile(file, MldExportOptions{ .platform = TargetPlatform::GameCube });
     const auto compressed = exporter.exportFile(file, MldExportOptions{ .platform = TargetPlatform::GameCube, .compressAklz = true });
 
-    ASSERT_TRUE(soasim::compression::aklz::isAklz(compressed));
-    const auto decoded = soasim::compression::aklz::decompress(compressed);
-    ASSERT_TRUE(decoded.ok()) << soasim::compression::aklz::errorToString(decoded.error);
+    ASSERT_TRUE(spice::compression::aklz::isAklz(compressed));
+    const auto decoded = spice::compression::aklz::decompress(compressed);
+    ASSERT_TRUE(decoded.ok()) << spice::compression::aklz::errorToString(decoded.error);
     EXPECT_EQ(decoded.bytes, uncompressed);
 }
 

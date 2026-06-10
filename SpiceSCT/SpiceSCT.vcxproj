@@ -21,32 +21,32 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{D528E9A2-9713-40A7-A7A1-21AF843E559E}</ProjectGuid>
-    <RootNamespace>SpiceTests</RootNamespace>
+    <ProjectGuid>{8EF58CAF-3DFA-46B9-9197-FE71052A15EB}</ProjectGuid>
+    <RootNamespace>SpiceSCT</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -76,18 +76,12 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_LIB;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
-      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)Sa3Dport;$(SolutionDir)third-party\googletest-1.17.0\googletest\include;$(SolutionDir)third-party\googletest-1.17.0\googletest;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
-    <Link>
-      <SubSystem>Console</SubSystem>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-    </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -95,33 +89,25 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_LIB;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
-      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)Sa3Dport;$(SolutionDir)third-party\googletest-1.17.0\googletest\include;$(SolutionDir)third-party\googletest-1.17.0\googletest;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
-    <Link>
-      <SubSystem>Console</SubSystem>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-      <OptimizeReferences>true</OptimizeReferences>
-      <EnableCOMDATFolding>true</EnableCOMDATFolding>
-    </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\third-party\googletest-1.17.0\googletest\src\gtest-all.cc" />
-    <ClCompile Include="run_tests.cpp" />
-    <ClCompile Include="test_aklz.cpp" />
-    <ClCompile Include="test_content_graph.cpp" />
-    <ClCompile Include="test_mld_endian.cpp" />
-    <ClCompile Include="test_sa3dport_stage1.cpp" />
-    <ClCompile Include="test_sa3dport_stage2.cpp" />
-    <ClCompile Include="test_sa3dport_stage3.cpp" />
-    <ClCompile Include="test_sa3dport_stage4.cpp" />
-    <ClCompile Include="test_sa3dport_stage5.cpp" />
-    <ClCompile Include="test_spicecore.cpp" />
+    <ClInclude Include="SpiceSCT.h" />
+    <ClInclude Include="SctModel.h" />
+    <ClInclude Include="SctParser.h" />
+    <ClInclude Include="SctParseProbe.h" />
+    <ClInclude Include="SctOpcodeMetadata.h" />
+    <ClInclude Include="SctScptDecodeHelpers.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="SctParser.cpp" />
+    <ClCompile Include="SctParseProbe.cpp" />
+    <ClCompile Include="SctScptDecodeHelpers.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Compression\Compression.vcxproj">
@@ -130,15 +116,9 @@
     <ProjectReference Include="..\SpiceCore\SpiceCore.vcxproj">
       <Project>{6F9D8280-6F7B-4237-9D4A-D9A09E7A1B2E}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\Sa3Dport\Sa3Dport.vcxproj">
-      <Project>{DF6013F5-9B25-4250-A0F7-EAF86E7BE9D7}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\SpiceContentGraph\SpiceContentGraph.vcxproj">
-      <Project>{208F502E-EBB9-4AF0-A886-356757A46D41}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\SpiceMLD\SpiceMLD.vcxproj">
-      <Project>{C44D37F8-61F5-4A1C-B983-16D79FBC9954}</Project>
-    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="SALSA_default_instructions_reference.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

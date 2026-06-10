@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{D528E9A2-9713-40A7-A7A1-21AF843E559E}</ProjectGuid>
-    <RootNamespace>SpiceTests</RootNamespace>
+    <ProjectGuid>{5D3077BE-5394-4707-8080-378AB630E54D}</ProjectGuid>
+    <RootNamespace>SpiceFileParsing</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -57,11 +57,9 @@
   <ImportGroup Label="Shared" />
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\ThirdParty.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\ThirdParty.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
@@ -72,17 +70,51 @@
     <Import Project="..\ThirdParty.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <SpiceRoot>$(MSBuildThisFileDirectory)..\</SpiceRoot>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;NOMINMAX;WIN32;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
-      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)Sa3Dport;$(SolutionDir)third-party\googletest-1.17.0\googletest\include;$(SolutionDir)third-party\googletest-1.17.0\googletest;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SpiceRoot)Sa3Dport;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -95,51 +127,46 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;NOMINMAX;WIN32;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
-      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)Sa3Dport;$(SolutionDir)third-party\googletest-1.17.0\googletest\include;$(SolutionDir)third-party\googletest-1.17.0\googletest;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SpiceRoot)Sa3Dport;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <OptimizeReferences>true</OptimizeReferences>
-      <EnableCOMDATFolding>true</EnableCOMDATFolding>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\third-party\googletest-1.17.0\googletest\src\gtest-all.cc" />
-    <ClCompile Include="run_tests.cpp" />
-    <ClCompile Include="test_aklz.cpp" />
-    <ClCompile Include="test_content_graph.cpp" />
-    <ClCompile Include="test_mld_endian.cpp" />
-    <ClCompile Include="test_sa3dport_stage1.cpp" />
-    <ClCompile Include="test_sa3dport_stage2.cpp" />
-    <ClCompile Include="test_sa3dport_stage3.cpp" />
-    <ClCompile Include="test_sa3dport_stage4.cpp" />
-    <ClCompile Include="test_sa3dport_stage5.cpp" />
-    <ClCompile Include="test_spicecore.cpp" />
+    <ClCompile Include="SpiceFileParsing.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Compression\Compression.vcxproj">
-      <Project>{4F68E37C-185F-4DE8-A4D7-647E6F3659C4}</Project>
-    </ProjectReference>
     <ProjectReference Include="..\SpiceCore\SpiceCore.vcxproj">
       <Project>{6F9D8280-6F7B-4237-9D4A-D9A09E7A1B2E}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Sa3Dport\Sa3Dport.vcxproj">
-      <Project>{DF6013F5-9B25-4250-A0F7-EAF86E7BE9D7}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\SpiceContentGraph\SpiceContentGraph.vcxproj">
-      <Project>{208F502E-EBB9-4AF0-A886-356757A46D41}</Project>
     </ProjectReference>
     <ProjectReference Include="..\SpiceMLD\SpiceMLD.vcxproj">
       <Project>{C44D37F8-61F5-4A1C-B983-16D79FBC9954}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\SpiceSCT\SpiceSCT.vcxproj">
+      <Project>{8EF58CAF-3DFA-46B9-9197-FE71052A15EB}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\SpiceContentGraph\SpiceContentGraph.vcxproj">
+      <Project>{208F502E-EBB9-4AF0-A886-356757A46D41}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\Sa3Dport\Sa3Dport.vcxproj">
+      <Project>{DF6013F5-9B25-4250-A0F7-EAF86E7BE9D7}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="decompressed_inputs\.gitkeep" />
+    <None Include="inputs\.gitkeep" />
+    <None Include="parsed\.gitkeep" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="PublishSa3DReferenceRunner" AfterTargets="Build" Condition="'$(Platform)'=='x64'">
+    <MakeDir Directories="$(OutDir)sa3d_bridge" />
+    <Exec Command="dotnet publish &quot;$(SpiceRoot)tools\sa3d_ref_runner\SA3DRefRunner.csproj&quot; -c $(Configuration) -r win-x64 --self-contained false -p:PublishSingleFile=false -o &quot;$(OutDir)sa3d_bridge&quot;" />
+  </Target>
   <ImportGroup Label="ExtensionTargets" />
 </Project>

@@ -27,7 +27,7 @@ Reference bridge runner for generating `parity_report_v1` JSON from fixture inpu
 
 - `--block-manifest <path>` allows one fixture-level invocation carrying all extracted NJ blocks.
 - The runner validates block paths and emits consolidated block metrics (`block_count`, object/motion counts).
-- This is intended for SoaSimFileParsing A/B flows that pass one manifest per fixture per slice.
+- This is intended for SpiceFileParsing A/B flows that pass one manifest per fixture per slice.
 
 ## Determinism behavior
 
@@ -39,5 +39,5 @@ Reference bridge runner for generating `parity_report_v1` JSON from fixture inpu
 ## Build / Run
 
 ```bash
-dotnet run --project tools/sa3d_ref_runner/SA3DRefRunner.csproj -- run-one --input SoaSimFileParsing/inputs/example.mld --out SoaSimFileParsing/parsed
+dotnet run --project tools/sa3d_ref_runner/SA3DRefRunner.csproj -- run-one --input SpiceFileParsing/inputs/example.mld --out SpiceFileParsing/parsed
 ```

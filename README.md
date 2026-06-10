@@ -7,12 +7,12 @@ SPICE is the Skies Parser, Importer, and Content Extractor split from SOASim. Th
 Included projects:
 
 - Compression
-- SoaSimGvm
-- SoaSimSCT
-- SoaSimMLD
-- SoaSimContentGraph
+- SpiceGvm
+- SpiceSCT
+- SpiceMLD
+- SpiceContentGraph
 - SpiceTests
-- SoaSimFileParsing
+- SpiceFileParsing
 - Sa3Dport
 - tools/sa3d_ref_runner
 - third-party/SA3D.Modeling
@@ -37,9 +37,9 @@ Use the VS 18 MSBuild toolchain from the repo root:
 ## CLI
 
 ```powershell
-.\bin\x64\Debug\SoaSimFileParsing.exe <input_dir> <output_dir> --sct-only
-.\bin\x64\Debug\SoaSimFileParsing.exe <input_dir> <output_dir> --export-mld-entry-list-only
-.\bin\x64\Debug\SoaSimFileParsing.exe <input_dir> <output_dir> --content-graph --content-graph-projection sections
+.\bin\x64\Debug\SpiceFileParsing.exe <input_dir> <output_dir> --sct-only
+.\bin\x64\Debug\SpiceFileParsing.exe <input_dir> <output_dir> --export-mld-entry-list-only
+.\bin\x64\Debug\SpiceFileParsing.exe <input_dir> <output_dir> --content-graph --content-graph-projection sections
 ```
 
 Reference materials and sample parser fixtures are under `soa_parser_reference_bundle/`.

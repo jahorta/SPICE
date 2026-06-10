@@ -22,13 +22,13 @@ soa_parser_reference_bundle/
 AGENTS.md
 
 # Parser generated outputs
-SoaSimFileParsing/blender_ir/
-SoaSimFileParsing/inputs_mld_only/
-SoaSimFileParsing/parsed_*/
-SoaSimFileParsing/decompressed_inputs/*
-!SoaSimFileParsing/decompressed_inputs/.gitignore
-SoaSimFileParsing/inputs/*
-!SoaSimFileParsing/inputs/.gitignore
+SpiceFileParsing/blender_ir/
+SpiceFileParsing/inputs_mld_only/
+SpiceFileParsing/parsed_*/
+SpiceFileParsing/decompressed_inputs/*
+!SpiceFileParsing/decompressed_inputs/.gitignore
+SpiceFileParsing/inputs/*
+!SpiceFileParsing/inputs/.gitignore
 
 # Python/cache artifacts
 __pycache__/
