@@ -3,6 +3,7 @@
   <ItemGroup>
     <ClCompile Include="..\third-party\googletest-1.17.0\googletest\src\gtest-all.cc" />
     <ClCompile Include="run_tests.cpp" />
+    <ClCompile Include="test_aklz.cpp" />
     <ClCompile Include="test_content_graph.cpp" />
     <ClCompile Include="test_mld_endian.cpp" />
     <ClCompile Include="test_sa3dport_stage1.cpp" />

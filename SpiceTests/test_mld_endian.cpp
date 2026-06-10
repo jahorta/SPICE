@@ -1,4 +1,5 @@
 #include "../SoaSimMLD/SoaSimMLD.h"
+#include "../Compression/Aklz.h"
 
 #include <gtest/gtest.h>
 
@@ -6,6 +7,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <vector>
 #include <array>
@@ -189,4 +191,30 @@ TEST(MldEndian, AutoDetectChoosesSmallerPlausibleEntryCount) {
     EXPECT_EQ(parsed.endian, Endian::Little);
     EXPECT_EQ(parsed.header.entryCount, 256U);
     EXPECT_EQ(parsed.header.indexTableOffset, 0x200000U);
+}
+
+TEST(MldEndian, GameCubeExportCanBeAklzCompressed) {
+    MldParser parser;
+    const auto file = parser.parseFile(makeMinimalMld(Endian::Big));
+    const MldFileExporter exporter;
+    const auto uncompressed = exporter.exportFile(file, MldExportOptions{ .platform = TargetPlatform::GameCube });
+    const auto compressed = exporter.exportFile(file, MldExportOptions{ .platform = TargetPlatform::GameCube, .compressAklz = true });
+
+    ASSERT_TRUE(soasim::compression::aklz::isAklz(compressed));
+    const auto decoded = soasim::compression::aklz::decompress(compressed);
+    ASSERT_TRUE(decoded.ok()) << soasim::compression::aklz::errorToString(decoded.error);
+    EXPECT_EQ(decoded.bytes, uncompressed);
+}
+
+TEST(MldEndian, DreamcastExportRejectsAklzCompression) {
+    MldParser parser;
+    const auto file = parser.parseFile(makeMinimalMld(Endian::Big));
+    const MldFileExporter exporter;
+
+    try {
+        (void)exporter.exportFile(file, MldExportOptions{ .platform = TargetPlatform::Dreamcast, .compressAklz = true });
+        FAIL() << "Expected AKLZ compression to reject Dreamcast export";
+    } catch (const std::runtime_error& ex) {
+        EXPECT_STREQ(ex.what(), "AKLZ compression is GameCube-only");
+    }
 }

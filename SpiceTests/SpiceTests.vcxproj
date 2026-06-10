@@ -113,6 +113,7 @@
   <ItemGroup>
     <ClCompile Include="..\third-party\googletest-1.17.0\googletest\src\gtest-all.cc" />
     <ClCompile Include="run_tests.cpp" />
+    <ClCompile Include="test_aklz.cpp" />
     <ClCompile Include="test_content_graph.cpp" />
     <ClCompile Include="test_mld_endian.cpp" />
     <ClCompile Include="test_sa3dport_stage1.cpp" />
@@ -123,6 +124,9 @@
     <ClCompile Include="test_spicecore.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Compression\Compression.vcxproj">
+      <Project>{4F68E37C-185F-4DE8-A4D7-647E6F3659C4}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\SpiceCore\SpiceCore.vcxproj">
       <Project>{6F9D8280-6F7B-4237-9D4A-D9A09E7A1B2E}</Project>
     </ProjectReference>
@@ -131,6 +135,9 @@
     </ProjectReference>
     <ProjectReference Include="..\SoaSimContentGraph\SoaSimContentGraph.vcxproj">
       <Project>{208F502E-EBB9-4AF0-A886-356757A46D41}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\SoaSimMLD\SoaSimMLD.vcxproj">
+      <Project>{C44D37F8-61F5-4A1C-B983-16D79FBC9954}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
