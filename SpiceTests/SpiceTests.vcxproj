@@ -116,6 +116,7 @@
     <ClCompile Include="test_aklz.cpp" />
     <ClCompile Include="test_content_graph.cpp" />
     <ClCompile Include="test_mld_endian.cpp" />
+    <ClCompile Include="test_sct_ir.cpp" />
     <ClCompile Include="test_sa3dport_stage1.cpp" />
     <ClCompile Include="test_sa3dport_stage2.cpp" />
     <ClCompile Include="test_sa3dport_stage3.cpp" />
@@ -138,6 +139,9 @@
     </ProjectReference>
     <ProjectReference Include="..\SpiceMLD\SpiceMLD.vcxproj">
       <Project>{C44D37F8-61F5-4A1C-B983-16D79FBC9954}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\SpiceSCT\SpiceSCT.vcxproj">
+      <Project>{8EF58CAF-3DFA-46B9-9197-FE71052A15EB}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
