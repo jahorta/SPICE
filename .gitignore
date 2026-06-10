@@ -18,6 +18,7 @@
 *.csproj.user
 .codex/
 soa_parser_reference_bundle/
+AGENTS.md
 
 # Parser generated outputs
 SoaSimFileParsing/blender_ir/
