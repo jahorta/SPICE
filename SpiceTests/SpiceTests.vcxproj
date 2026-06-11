@@ -115,6 +115,8 @@
     <ClCompile Include="run_tests.cpp" />
     <ClCompile Include="test_aklz.cpp" />
     <ClCompile Include="test_content_graph.cpp" />
+    <ClCompile Include="test_gvr_image_ir.cpp" />
+    <ClCompile Include="test_mld_gvr_format_inventory.cpp" />
     <ClCompile Include="test_mld_endian.cpp" />
     <ClCompile Include="test_sct_ir.cpp" />
     <ClCompile Include="test_sct_real_fixtures.cpp" />
@@ -138,6 +140,9 @@
     </ProjectReference>
     <ProjectReference Include="..\SpiceContentGraph\SpiceContentGraph.vcxproj">
       <Project>{208F502E-EBB9-4AF0-A886-356757A46D41}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\SpiceGvm\SpiceGvm.vcxproj">
+      <Project>{A3D377F9-43B8-4A4B-8C78-8F069B98E6F1}</Project>
     </ProjectReference>
     <ProjectReference Include="..\SpiceMLD\SpiceMLD.vcxproj">
       <Project>{C44D37F8-61F5-4A1C-B983-16D79FBC9954}</Project>

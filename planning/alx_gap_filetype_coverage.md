@@ -288,3 +288,48 @@ than gameplay, field, battle, audio, and model asset formats.
    structures.
 4. Cross-reference SCT string/resource references against unsupported file
    stems to prioritize formats by gameplay reachability.
+
+## Generated Inventory Workflow
+
+The first implementation should use the dependency-free Python tool at
+`tools/disc_inventory/spice_disc_inventory.py`:
+
+```powershell
+python tools\disc_inventory\spice_disc_inventory.py `
+  --disc-root D:\SoAGC\2003-03-05-gc-eu-final_Skies_of_Arcadia_Legends `
+  --out $env:TEMP\spice_disc_inventory
+```
+
+The generated outputs are analysis artifacts and should remain untracked unless
+explicitly requested:
+
+- `disc_inventory.json`
+- `unsupported_payload_signatures.json`
+- `sct_resource_references.json`
+- `unsupported_format_analysis.json`
+- `unsupported_priority_report.md`
+
+The inventory workflow performs AKLZ decompression in memory for bounded
+payload previews and SCT resource-reference matching. It does not write raw or
+decompressed game payloads to disk.
+
+### Enhanced Inventory Result
+
+The enhanced Python inventory run against the EU final dump produced these
+target-selection signals:
+
+- `.sst` plus `.sml` form 136 one-to-one `battle/` stem pairs. Both families
+  are AKLZ-wrapped in 135 of 136 files and each file has a distinct
+  decompressed header prefix. The pairing makes this the best first real parser
+  target because each parsed `.sst` can be validated against its `.sml`
+  companion by stem.
+- `.mlk` remains the largest unsupported family at 577 AKLZ-wrapped files, but
+  its decompressed headers cluster into 363 prefixes. It exposes many Ninja-like
+  strings such as `.nj`, `NJCM`, `NJTL`, and `POF0`, so it is likely important
+  but less bounded as a first parser than the paired battle files.
+- `.gvr` is the easiest standalone quick win: all 5 files share one
+  decompressed header cluster and expose `GCIX` plus `GVRT`, matching the
+  existing low-level `SpiceGvm` parser surface.
+- SCT heuristic string extraction still produced zero direct references to
+  unsupported file names. Deeper SCT semantic operand parsing is needed before
+  SCT reachability can drive target ranking.
