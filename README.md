@@ -1,6 +1,6 @@
 # SPICE
 
-SPICE is the Skies Parser, Importer, and Content Extractor split from SOASim. This first split preserves the existing Skies of Arcadia parser/content tooling behavior, including SCT parsing, MLD entry-list export, content graph export, and SA3D-backed geometry/Blender IR support.
+SPICE is the Skies Package Interchange and Content Encoder. This first split preserves the existing Skies of Arcadia parser/content tooling behavior, including SCT parsing, MLD entry-list export, content graph export, and SA3D-backed geometry/Blender IR support.
 
 ## Scope
 
@@ -17,8 +17,6 @@ Included projects:
 - tools/sa3d_ref_runner
 - third-party/SA3D.Modeling
 - third-party/googletest-1.17.0
-
-The SOASim runtime, DB, Qt, and Dolphin application code are intentionally not part of this repo.
 
 ## Build
 

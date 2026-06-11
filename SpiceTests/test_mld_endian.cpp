@@ -149,6 +149,31 @@ TEST(MldEndian, ParsesBigAndLittleEndianFixturesToEquivalentIr) {
     EXPECT_EQ(be.entries[0].entry.groundAddresses->values, le.entries[0].entry.groundAddresses->values);
 }
 
+TEST(MldEndian, PreservesFullMotionAddressSlotListWithZeroEntries) {
+    auto bytes = makeMinimalMld(Endian::Big);
+    bytes.resize(0x220U, 0U);
+    const std::vector<std::uint32_t> motions{ 0U, 0x180U, 0U, 0x1C0U };
+    writeList(bytes, kListMotions, motions, Endian::Big);
+    writeTag(bytes, 0x180U, "NJCM");
+    writeTag(bytes, 0x1C0U, "NJCM");
+
+    MldParser parser;
+    const auto parsedFile = parser.parseFile(bytes);
+    ASSERT_EQ(parsedFile.entries.size(), 1U);
+    ASSERT_TRUE(parsedFile.entries[0].entry.motionAddresses);
+    EXPECT_EQ(parsedFile.entries[0].entry.motionAddresses->values, motions);
+    EXPECT_EQ(parsedFile.entries[0].entry.motionCount, 2U);
+
+    spice::mld::parsing::ParseOptions options{};
+    options.buildBlenderIntermediateIr = false;
+    const auto parsed = parser.parse(bytes, options);
+    ASSERT_EQ(parsed.entryList.size(), 1U);
+    EXPECT_EQ(parsed.entryList[0].motionAddresses, motions);
+    EXPECT_EQ(parsed.entryList[0].motionCount, 2U);
+    ASSERT_EQ(parsed.rawEntries.size(), 1U);
+    EXPECT_EQ(parsed.rawEntries[0].motionAddresses, motions);
+}
+
 TEST(MldEndian, ExportGameCubeToDreamcastPreservesSemanticIrAndFourCcBytes) {
     MldParser parser;
     const auto be = parser.parseFile(makeMinimalMld(Endian::Big));
