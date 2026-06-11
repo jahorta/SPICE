@@ -43,6 +43,7 @@ Use the VS 18 MSBuild toolchain from the repo root:
 .\bin\x64\Debug\SpiceFileParsing.exe <ir_dir> <output_dir> --gvr-only --import-gvr-image-ir --gvr-aklz preserve
 .\bin\x64\Debug\SpiceFileParsing.exe --create-gvr texture.png texture.gvr --gvr-format cmpr --gvr-mipmaps on
 .\bin\x64\Debug\SpiceFileParsing.exe --replace-gvr original.gvr replacement.png texture.gvr
+.\bin\x64\Debug\SpiceFileParsing.exe --replace-mld-texture source.mld replacement.png output.mld --mld-texture-name tk000000 --gvr-format rgba8 --mld-allow-dimension-change
 .\bin\x64\Debug\SpiceFileParsing.exe <png_dir> <gvr_out_dir> --gvr-only --create-gvr-batch --gvr-format ci8 --gvr-palette-format rgb5a3
 .\bin\x64\Debug\SpiceFileParsing.exe <png_dir> <gvr_out_dir> --gvr-only --replace-gvr-batch <source_gvr_dir>
 ```
@@ -63,5 +64,11 @@ value unless explicit `--gvr-format`, `--gvr-palette-format`, `--gvr-mipmaps`,
 
 MLD GVR format sampling writes `mld_gvr_format_inventory.json` and
 `mld_gvr_format_priority_report.md` without raw texture payloads.
+
+Embedded MLD texture replacement rebuilds the texture archive, so replacement
+GVR payloads may grow or shrink. Select the target with `--mld-texture-index` or
+`--mld-texture-name`; output preserves MLD AKLZ wrapping by default through
+`--mld-aklz preserve`. If an archive is not terminal, size-changing replacements
+fail unless `--mld-allow-post-archive-shift` is supplied.
 
 Reference materials and sample parser fixtures are under `soa_parser_reference_bundle/`.

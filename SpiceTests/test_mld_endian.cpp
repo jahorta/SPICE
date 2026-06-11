@@ -1,4 +1,5 @@
 #include "../SpiceMLD/SpiceMLD.h"
+#include "../SpiceGvm/SpiceGvm.h"
 #include "../Compression/Aklz.h"
 
 #include <gtest/gtest.h>
@@ -67,6 +68,19 @@ void writeTag(std::vector<std::uint8_t>& bytes, std::size_t offset, const char* 
     bytes[offset + 3U] = static_cast<std::uint8_t>(tag[3]);
 }
 
+void appendU32(std::vector<std::uint8_t>& bytes, std::uint32_t value, Endian endian) {
+    const auto offset = bytes.size();
+    bytes.resize(offset + 4U);
+    writeU32(bytes, offset, value, endian);
+}
+
+void appendNameRecord(std::vector<std::uint8_t>& bytes, const std::string& name) {
+    const auto offset = bytes.size();
+    bytes.resize(offset + 44U, 0U);
+    const auto count = std::min<std::size_t>(name.size(), 31U);
+    std::copy_n(name.begin(), count, bytes.begin() + static_cast<std::ptrdiff_t>(offset));
+}
+
 void writeList(std::vector<std::uint8_t>& bytes, std::size_t offset, std::span<const std::uint32_t> values, Endian endian) {
     writeU32(bytes, offset, static_cast<std::uint32_t>(values.size()), endian);
     for (std::size_t i = 0; i < values.size(); ++i) {
@@ -126,6 +140,57 @@ std::vector<std::uint8_t> makeMinimalMld(Endian endian) {
     writeU16(bytes, kGrndOffset + 0x2AU, 0U, endian);
 
     writeU32(bytes, kTextureTable, 0U, endian);
+    return bytes;
+}
+
+spice::gvm::model::RgbaImage makeImage(std::uint32_t width, std::uint32_t height, std::uint8_t bias = 0U) {
+    spice::gvm::model::RgbaImage image{};
+    image.width = width;
+    image.height = height;
+    image.rgba8.resize(static_cast<std::size_t>(width) * height * 4U);
+    for (std::uint32_t y = 0; y < height; ++y) {
+        for (std::uint32_t x = 0; x < width; ++x) {
+            const auto offset = (static_cast<std::size_t>(y) * width + x) * 4U;
+            image.rgba8[offset + 0U] = static_cast<std::uint8_t>((x * 17U + bias) & 0xFFU);
+            image.rgba8[offset + 1U] = static_cast<std::uint8_t>((y * 19U + bias) & 0xFFU);
+            image.rgba8[offset + 2U] = static_cast<std::uint8_t>(((x + y) * 13U + bias) & 0xFFU);
+            image.rgba8[offset + 3U] = 0xFFU;
+        }
+    }
+    return image;
+}
+
+std::vector<std::uint8_t> encodeTexture(
+    const spice::gvm::model::RgbaImage& image,
+    spice::gvm::model::TextureFormat format,
+    spice::gvm::model::PaletteFormat palette = spice::gvm::model::PaletteFormat::None,
+    bool hasGlobalIndex = false,
+    std::uint32_t globalIndex = 0U) {
+    spice::gvm::encoding::EncodeOptions options{};
+    options.textureFormat = format;
+    options.paletteFormat = palette;
+    options.hasGlobalIndex = hasGlobalIndex;
+    options.globalIndex = globalIndex;
+    return spice::gvm::encoding::encodeGvr(image, options);
+}
+
+std::vector<std::uint8_t> makeTexturedMld(
+    const std::vector<std::uint8_t>& firstTexture,
+    const std::vector<std::uint8_t>& secondTexture,
+    bool addSuffix = false) {
+    auto bytes = makeMinimalMld(Endian::Big);
+    bytes.resize(kTextureTable);
+    appendU32(bytes, 2U, Endian::Big);
+    appendNameRecord(bytes, "tex_a");
+    appendNameRecord(bytes, "tex_b");
+    bytes.insert(bytes.end(), firstTexture.begin(), firstTexture.end());
+    bytes.insert(bytes.end(), secondTexture.begin(), secondTexture.end());
+    if (addSuffix) {
+        bytes.push_back('T');
+        bytes.push_back('A');
+        bytes.push_back('I');
+        bytes.push_back('L');
+    }
     return bytes;
 }
 
@@ -242,4 +307,124 @@ TEST(MldEndian, DreamcastExportRejectsAklzCompression) {
     } catch (const std::runtime_error& ex) {
         EXPECT_STREQ(ex.what(), "AKLZ compression is GameCube-only");
     }
+}
+
+TEST(MldTextureArchiveRebuild, ReplacesWithLargerTextureAndPreservesNames) {
+    const auto small = encodeTexture(makeImage(8U, 8U, 3U), spice::gvm::model::TextureFormat::I4);
+    const auto second = encodeTexture(makeImage(8U, 8U, 7U), spice::gvm::model::TextureFormat::RGB565);
+    const auto replacement = encodeTexture(makeImage(8U, 8U, 11U), spice::gvm::model::TextureFormat::RGBA8);
+    ASSERT_GT(replacement.size(), small.size());
+
+    MldParser parser;
+    const auto originalBytes = makeTexturedMld(small, second);
+    const auto parsed = parser.parseFile(originalBytes);
+    ASSERT_TRUE(parsed.textureArchive.has_value());
+    ASSERT_EQ(parsed.textureArchive->entries.size(), 2U);
+    EXPECT_EQ(parsed.textureArchive->entries[0].textureName, "tex_a");
+    EXPECT_EQ(parsed.textureArchive->entries[1].textureName, "tex_b");
+    ASSERT_FALSE(parsed.textureArchive->archivePrefixBytes.empty());
+
+    MldExportOptions options{};
+    options.platform = TargetPlatform::GameCube;
+    options.textureReplacement = spice::mld::exporting::MldTextureReplacement{
+        .textureIndex = 0U,
+        .gvrData = replacement,
+    };
+
+    const auto rebuilt = MldFileExporter{}.exportFile(parsed, options);
+    EXPECT_EQ(rebuilt.size(), originalBytes.size() + replacement.size() - small.size());
+
+    const auto reparsed = parser.parseFile(rebuilt);
+    ASSERT_TRUE(reparsed.textureArchive.has_value());
+    ASSERT_EQ(reparsed.textureArchive->entries.size(), 2U);
+    EXPECT_EQ(reparsed.textureArchive->entries[0].textureName, "tex_a");
+    EXPECT_EQ(reparsed.textureArchive->entries[1].textureName, "tex_b");
+    EXPECT_EQ(reparsed.textureArchive->entries[0].gvrDataSize, replacement.size());
+    EXPECT_EQ(reparsed.textureArchive->entries[1].gvrDataSize, second.size());
+    EXPECT_EQ(reparsed.textureArchive->entries[0].sourceFormat, "RGBA8");
+    EXPECT_EQ(reparsed.textureArchive->archivePrefixBytes, parsed.textureArchive->archivePrefixBytes);
+}
+
+TEST(MldTextureArchiveRebuild, ReplacesWithSmallerTextureWithoutPadding) {
+    const auto large = encodeTexture(makeImage(8U, 8U, 5U), spice::gvm::model::TextureFormat::RGBA8);
+    const auto second = encodeTexture(makeImage(8U, 8U, 9U), spice::gvm::model::TextureFormat::RGB5A3);
+    const auto replacement = encodeTexture(makeImage(8U, 8U, 13U), spice::gvm::model::TextureFormat::I4);
+    ASSERT_LT(replacement.size(), large.size());
+
+    MldParser parser;
+    const auto originalBytes = makeTexturedMld(large, second);
+    const auto parsed = parser.parseFile(originalBytes);
+    ASSERT_TRUE(parsed.textureArchive.has_value());
+
+    MldExportOptions options{};
+    options.platform = TargetPlatform::GameCube;
+    options.textureReplacement = spice::mld::exporting::MldTextureReplacement{
+        .textureIndex = 0U,
+        .gvrData = replacement,
+    };
+
+    const auto rebuilt = MldFileExporter{}.exportFile(parsed, options);
+    EXPECT_EQ(rebuilt.size(), originalBytes.size() - (large.size() - replacement.size()));
+
+    const auto reparsed = parser.parseFile(rebuilt);
+    ASSERT_TRUE(reparsed.textureArchive.has_value());
+    ASSERT_EQ(reparsed.textureArchive->entries.size(), 2U);
+    EXPECT_EQ(reparsed.textureArchive->entries[0].gvrDataSize, replacement.size());
+    EXPECT_EQ(reparsed.textureArchive->entries[1].gvrDataSize, second.size());
+    EXPECT_EQ(reparsed.textureArchive->entries[0].sourceFormat, "I4");
+}
+
+TEST(MldTextureArchiveRebuild, RejectsNonTerminalArchiveSizeShiftByDefault) {
+    const auto small = encodeTexture(makeImage(8U, 8U, 3U), spice::gvm::model::TextureFormat::I4);
+    const auto second = encodeTexture(makeImage(8U, 8U, 7U), spice::gvm::model::TextureFormat::RGB565);
+    const auto replacement = encodeTexture(makeImage(8U, 8U, 11U), spice::gvm::model::TextureFormat::RGBA8);
+
+    MldParser parser;
+    const auto parsed = parser.parseFile(makeTexturedMld(small, second, true));
+    ASSERT_TRUE(parsed.textureArchive.has_value());
+
+    MldExportOptions options{};
+    options.platform = TargetPlatform::GameCube;
+    options.textureReplacement = spice::mld::exporting::MldTextureReplacement{
+        .textureIndex = 0U,
+        .gvrData = replacement,
+    };
+
+    EXPECT_THROW((void)MldFileExporter{}.exportFile(parsed, options), std::runtime_error);
+    options.textureReplacement->allowPostArchiveShift = true;
+    const auto rebuilt = MldFileExporter{}.exportFile(parsed, options);
+    ASSERT_GE(rebuilt.size(), 4U);
+    EXPECT_EQ(rebuilt[rebuilt.size() - 4U], 'T');
+    EXPECT_EQ(rebuilt[rebuilt.size() - 3U], 'A');
+    EXPECT_EQ(rebuilt[rebuilt.size() - 2U], 'I');
+    EXPECT_EQ(rebuilt[rebuilt.size() - 1U], 'L');
+}
+
+TEST(MldTextureArchiveRebuild, PreservesAklzWrappingByDefaultWhenCompressed) {
+    const auto small = encodeTexture(makeImage(8U, 8U, 3U), spice::gvm::model::TextureFormat::I4);
+    const auto second = encodeTexture(makeImage(8U, 8U, 7U), spice::gvm::model::TextureFormat::RGB565);
+    const auto replacement = encodeTexture(makeImage(8U, 8U, 11U), spice::gvm::model::TextureFormat::RGBA8);
+    const auto compressed = spice::compression::aklz::compress(makeTexturedMld(small, second));
+    ASSERT_TRUE(compressed.ok()) << spice::compression::aklz::errorToString(compressed.error);
+
+    MldParser parser;
+    const auto parsed = parser.parseFile(compressed.bytes);
+    ASSERT_TRUE(parsed.sourceWasCompressedAklz);
+    ASSERT_TRUE(parsed.textureArchive.has_value());
+
+    MldExportOptions options{};
+    options.platform = TargetPlatform::GameCube;
+    options.compressAklz = parsed.sourceWasCompressedAklz;
+    options.textureReplacement = spice::mld::exporting::MldTextureReplacement{
+        .textureIndex = 0U,
+        .gvrData = replacement,
+    };
+
+    const auto rebuilt = MldFileExporter{}.exportFile(parsed, options);
+    ASSERT_TRUE(spice::compression::aklz::isAklz(rebuilt));
+    const auto decoded = spice::compression::aklz::decompress(rebuilt);
+    ASSERT_TRUE(decoded.ok()) << spice::compression::aklz::errorToString(decoded.error);
+    const auto reparsed = parser.parseFile(decoded.bytes);
+    ASSERT_TRUE(reparsed.textureArchive.has_value());
+    EXPECT_EQ(reparsed.textureArchive->entries[0].gvrDataSize, replacement.size());
 }
