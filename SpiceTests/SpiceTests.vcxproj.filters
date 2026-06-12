@@ -11,6 +11,7 @@
     <ClCompile Include="test_sct_ir.cpp" />
     <ClCompile Include="test_sct_real_fixtures.cpp" />
     <ClCompile Include="test_sct_roundtrip.cpp" />
+    <ClCompile Include="test_sst_sml_parser.cpp" />
     <ClCompile Include="test_sa3dport_stage1.cpp" />
     <ClCompile Include="test_sa3dport_stage2.cpp" />
     <ClCompile Include="test_sa3dport_stage3.cpp" />

@@ -2,8 +2,8 @@
 
 ## Purpose
 
-This document summarizes the filetype inventory from the Skies of Arcadia Legends
-GameCube EU disc dump at:
+This document summarizes the initial filetype inventory from the Skies of
+Arcadia Legends GameCube EU disc dump at:
 
 `D:\SoAGC\2003-03-05-gc-eu-final_Skies_of_Arcadia_Legends`
 
@@ -333,3 +333,90 @@ target-selection signals:
 - SCT heuristic string extraction still produced zero direct references to
   unsupported file names. Deeper SCT semantic operand parsing is needed before
   SCT reachability can drive target ranking.
+
+## Focused `.sst` / `.sml` Investigation Plan
+
+Status: current investigation direction. Do not implement parser support from
+this section until game-side handler evidence and payload pattern evidence agree
+on at least one useful structure boundary.
+
+### Ghidra-First Workflow
+
+Use the repo-local Ghidra setup recorded in `AGENTS.md`:
+
+- Ghidra root: `tools\ghidra\ghidra_11.4.3_PUBLIC`
+- Project root: `tools\ghidra\ghidra_soal`
+- Project: `Skies_of_Arcadia_Legends`
+- Headless process entry: `US_jahorta_main.dol`
+- Opened program name: `main.dol`
+
+Because the available Ghidra project is US-based, schema comparisons against
+game-side handler code should use the US final dump first:
+
+- US primary: `D:\SoAGC\2002-12-19-gc-us-final_Skies_of_Arcadia_Legends`
+- EU compatibility: `D:\SoAGC\2003-03-05-gc-eu-final_Skies_of_Arcadia_Legends`
+- JP compatibility: `D:\SoAGC\2002-11-12-gc-jp-final_Eternal_Arcadia_Legends`
+
+EU and JP remain required compatibility checks. Any US/EU/JP difference should
+be documented as a regional delta rather than treated as a parser error by
+default.
+
+Create reusable headless scripts under `tools\ghidra\ghidra_scripts` and write
+local outputs under `tools\ghidra\analyses\<timestamp>_sst_sml_handlers`. These
+paths are ignored and must remain local-only.
+
+Durable summary and supporting notes for the first Ghidra-forward pass are in
+`planning\Analysis\2026-06-11_sst_sml_ghidra_handlers`.
+
+Durable US-primary regional validation for the joined SST/SML schema is in
+`planning\Analysis\2026-06-12_sst_sml_joined_schema`.
+
+Durable command payload field evidence and US/EU/JP field-range validation are
+in `planning\Analysis\2026-06-12_sst_sml_command_payload_schema`.
+
+Investigation order:
+
+1. Refresh or validate the local Ghidra project only if needed with
+   `tools\ghidra\Update-LocalGhidraProject.ps1`. The current known function
+   count is `6953`.
+2. Enumerate strings containing `.sst`, `.sml`, related battle file stems, and
+   neighboring unsupported extensions. Output each string address, value, direct
+   references, containing functions, and caller/callee context.
+3. Rank candidate handlers by direct extension references, shared extension
+   dispatch, file path construction, AKLZ/decompression calls, and structured
+   reads from loaded buffers.
+4. Decompile likely handler functions and save compact excerpts around
+   file-open, load, decompression, and buffer-read behavior. Preserve exact
+   function names and addresses.
+5. Decompress representative `battle\s001`, `battle\s002`, `battle\s006`,
+   `battle\s021`, and `battle\s150` `.sst` / `.sml` pairs from the US dump
+   first. Run the same stems against EU and JP when present, and report missing
+   stems as regional absences.
+6. Write a local summary tying together candidate handler addresses, string
+   xrefs, likely call chain, observed binary structures, unresolved questions,
+   regional deltas, and the next parser milestone.
+
+Do not initially wire `.sst` or `.sml` into the production `SpiceFileParsing`
+dispatch. The current CLI intentionally gates supported top-level parsing to
+known formats such as `.sct`, `.mld`, and GVR modes.
+
+Once the structure is understood, add a dedicated read-only parser surface
+rather than folding this into SCT or MLD code. The first stable API should parse
+confirmed headers/tables and emit JSON plus a text summary. Full binary export
+or repackaging should wait until the format semantics are better proven.
+
+### Validation Criteria
+
+The investigation milestone should satisfy these checks:
+
+- at least one Ghidra-derived handler candidate for `.sst` or `.sml`, not just
+  payload clustering
+- every binary-layout claim cites a handler function/read pattern or a
+  cross-file pattern across same-stem `.sst` / `.sml` pairs, with the supporting
+  region named
+- US corpus validation is primary for Ghidra-correlated schema claims, with EU
+  and JP compatibility validation recorded second
+- raw copied files, decompressed payloads, Ghidra outputs, and notes remain
+  local-only under ignored paths
+- if extension strings have no direct code xrefs, pivot to full names, stem
+  patterns, extension dispatch tables, file-open wrappers, and AKLZ call sites

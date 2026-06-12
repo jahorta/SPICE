@@ -19,6 +19,7 @@
 .codex/
 graphify-out/
 soa_parser_reference_bundle/
+tools/ghidra/
 SpiceSCT/validations/
 AGENTS.md
 
@@ -30,6 +31,8 @@ SpiceFileParsing/decompressed_inputs/*
 !SpiceFileParsing/decompressed_inputs/.gitignore
 SpiceFileParsing/inputs/*
 !SpiceFileParsing/inputs/.gitignore
+SpiceSstSml/research/
+planning/Analysis/
 
 # Python/cache artifacts
 __pycache__/
