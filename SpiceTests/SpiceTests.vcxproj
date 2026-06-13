@@ -119,6 +119,7 @@
     <ClCompile Include="test_mld_gvr_format_inventory.cpp" />
     <ClCompile Include="test_mld_endian.cpp" />
     <ClCompile Include="test_mlk_corpus_export.cpp" />
+    <ClCompile Include="test_mlk_parser.cpp" />
     <ClCompile Include="test_mlk_scanner.cpp" />
     <ClCompile Include="test_sct_ir.cpp" />
     <ClCompile Include="test_sct_real_fixtures.cpp" />
