@@ -10,6 +10,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 #include <array>
 
@@ -237,6 +238,40 @@ TEST(MldEndian, PreservesFullMotionAddressSlotListWithZeroEntries) {
     EXPECT_EQ(parsed.entryList[0].motionCount, 2U);
     ASSERT_EQ(parsed.rawEntries.size(), 1U);
     EXPECT_EQ(parsed.rawEntries[0].motionAddresses, motions);
+}
+
+TEST(BlenderIrJsonExporter, EmitsWeightedMeshBinding) {
+    spice::mld::model::BlenderIrScene scene{};
+    spice::mld::model::BlenderIrMesh mesh{};
+    mesh.label = "weighted";
+    mesh.sourceObjectAddress = 0x1000;
+    mesh.sourceChunkOffset = 0x2000;
+    mesh.sourceAttachOffset = 0x3000;
+    mesh.weightedBinding = spice::mld::model::BlenderIrWeightedBinding{
+        .rootNodeIndex = 4,
+        .sourceNodeIndex = 7,
+        .nodeIndices = {4, 7},
+    };
+
+    spice::mld::model::BlenderIrVertex vertex{};
+    vertex.hasPosition = true;
+    vertex.hasNormal = true;
+    vertex.weights.push_back({.boneOrNodeIndex = 4, .weight = 0.25f});
+    vertex.weights.push_back({.boneOrNodeIndex = 7, .weight = 0.75f});
+    mesh.vertices.push_back(std::move(vertex));
+
+    spice::mld::model::BlenderIrMaterial material{};
+    material.materialHash = 1;
+    mesh.materials.push_back(material);
+
+    spice::mld::model::BlenderIrTriangleSet triangles{};
+    triangles.corners.resize(3);
+    mesh.triangleSets.push_back(std::move(triangles));
+    scene.meshes.push_back(std::move(mesh));
+
+    const auto json = spice::mld::exporting::BlenderIrJsonExporter{}.toJson(scene);
+    EXPECT_NE(json.find("\"weightedBinding\":{\"rootNodeIndex\":4,\"sourceNodeIndex\":7,\"nodeIndices\":[4,7]}"), std::string::npos);
+    EXPECT_NE(json.find("\"weights\":[{\"boneOrNodeIndex\":4,\"weight\":0.25},{\"boneOrNodeIndex\":7,\"weight\":0.75}]"), std::string::npos);
 }
 
 TEST(MldEndian, ExportGameCubeToDreamcastPreservesSemanticIrAndFourCcBytes) {
