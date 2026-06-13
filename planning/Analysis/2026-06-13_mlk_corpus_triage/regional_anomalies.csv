@@ -1,0 +1,16 @@
+region,path,tableShape,recordCountCandidate,selectedRecordCount,firstPayloadOffset,recordCountInferredFromFirstPayloadOffset,errorCount,payloadOutOfBoundsCount,embeddedMldEntryListAcceptedCount
+us,beff/d2403900.mlk,first-payload-count-candidate,20992,20992,1320,82,15795,15795,33
+us,beff/d2900200.mlk,malformed-record-spans,28,28,456,28,14,14,14
+us,beff/f2705733.mlk,malformed-record-spans,10,10,168,10,5,5,5
+us,beff/f2900200.mlk,malformed-record-spans,28,28,456,28,14,14,14
+us,beff/f290986b.mlk,malformed-record-spans,10,10,168,10,5,5,5
+eu,beff/d2403900.mlk,first-payload-count-candidate,20992,20992,1320,82,15795,15795,33
+eu,beff/d2900200.mlk,malformed-record-spans,28,28,456,28,14,14,14
+eu,beff/f2705733.mlk,malformed-record-spans,10,10,168,10,5,5,5
+eu,beff/f2900200.mlk,malformed-record-spans,28,28,456,28,14,14,14
+eu,beff/f290986b.mlk,malformed-record-spans,10,10,168,10,5,5,5
+jp,beff/d2403900.mlk,first-payload-count-candidate,20992,20992,1320,82,15795,15795,33
+jp,beff/d2900200.mlk,malformed-record-spans,28,28,456,28,14,14,14
+jp,beff/f2705733.mlk,malformed-record-spans,10,10,168,10,5,5,5
+jp,beff/f2900200.mlk,malformed-record-spans,28,28,456,28,14,14,14
+jp,beff/f290986b.mlk,malformed-record-spans,10,10,168,10,5,5,5
