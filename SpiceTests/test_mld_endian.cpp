@@ -289,6 +289,41 @@ TEST(BlenderIrJsonExporter, EmitsTblIdAsSignedDecimalNumber) {
     EXPECT_EQ(json.find("\"tblId\":0x"), std::string::npos);
 }
 
+TEST(SpiceMldBlenderIr, EmitsOptionalSourceRecordMetadataOnlyWhenPresent) {
+    spice::mld::model::BlenderIrScene plainScene{};
+    spice::mld::model::BlenderIrMesh plainMesh{};
+    plainMesh.label = "plain";
+    plainScene.meshes.push_back(std::move(plainMesh));
+
+    const auto plainJson = spice::mld::exporting::BlenderIrJsonExporter{}.toJson(plainScene);
+    EXPECT_EQ(plainJson.find("\"sourceRecord\""), std::string::npos);
+
+    spice::mld::model::BlenderIrScene scene{};
+    spice::mld::model::BlenderIrMesh mesh{};
+    mesh.label = "with_source";
+    mesh.sourceRecord = spice::mld::model::BlenderIrSourceRecord{
+        .containerKind = "mlk",
+        .containerPath = "beff/sample.mlk",
+        .recordIndex = 3U,
+        .recordOffset = 0x38U,
+        .key = 7704300U,
+        .generatedMldName = "E7704300.MLD",
+        .rawWord12 = 5U,
+        .payloadOffset = 0x100U,
+        .payloadSize = 0x200U,
+        .payloadKind = "mld",
+    };
+    scene.meshes.push_back(std::move(mesh));
+
+    const auto json = spice::mld::exporting::BlenderIrJsonExporter{}.toJson(scene);
+    EXPECT_NE(json.find("\"sourceRecord\":{\"containerKind\":\"mlk\""), std::string::npos);
+    EXPECT_NE(json.find("\"containerPath\":\"beff/sample.mlk\""), std::string::npos);
+    EXPECT_NE(json.find("\"recordIndex\":3"), std::string::npos);
+    EXPECT_NE(json.find("\"generatedMldName\":\"E7704300.MLD\""), std::string::npos);
+    EXPECT_NE(json.find("\"rawWord12\":5"), std::string::npos);
+    EXPECT_NE(json.find("\"payloadKind\":\"mld\""), std::string::npos);
+}
+
 TEST(MldEndian, ParsesTblIdAsSignedAndExportsOriginalBits) {
     auto bytes = makeMinimalMld(Endian::Big);
     writeU32(bytes, kEntryOffset + 0x04U, 0xFFFFFFFEU, Endian::Big);

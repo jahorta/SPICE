@@ -32,6 +32,7 @@ SpiceFileParsing/decompressed_inputs/*
 SpiceFileParsing/inputs/*
 !SpiceFileParsing/inputs/.gitignore
 SpiceSstSml/research/
+SpiceMlk/research/
 planning/Analysis/
 
 # Python/cache artifacts
