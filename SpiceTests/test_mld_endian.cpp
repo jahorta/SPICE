@@ -274,6 +274,38 @@ TEST(BlenderIrJsonExporter, EmitsWeightedMeshBinding) {
     EXPECT_NE(json.find("\"weights\":[{\"boneOrNodeIndex\":4,\"weight\":0.25},{\"boneOrNodeIndex\":7,\"weight\":0.75}]"), std::string::npos);
 }
 
+TEST(BlenderIrJsonExporter, EmitsTblIdAsSignedDecimalNumber) {
+    spice::mld::model::BlenderIrScene scene{};
+    spice::mld::model::BlenderIrInstance instance{};
+    instance.sourceEntryId = 1;
+    instance.tableIndex = 0;
+    instance.tblId = -42;
+    instance.fxnName = "wall";
+    scene.indexEntries.push_back(std::move(instance));
+
+    const auto json = spice::mld::exporting::BlenderIrJsonExporter{}.toJson(scene);
+    EXPECT_NE(json.find("\"tblId\":-42"), std::string::npos);
+    EXPECT_EQ(json.find("\"tblId\":\"-42\""), std::string::npos);
+    EXPECT_EQ(json.find("\"tblId\":0x"), std::string::npos);
+}
+
+TEST(MldEndian, ParsesTblIdAsSignedAndExportsOriginalBits) {
+    auto bytes = makeMinimalMld(Endian::Big);
+    writeU32(bytes, kEntryOffset + 0x04U, 0xFFFFFFFEU, Endian::Big);
+
+    MldParser parser;
+    const auto parsed = parser.parseFile(bytes);
+    ASSERT_EQ(parsed.entries.size(), 1U);
+    EXPECT_EQ(parsed.entries[0].entry.tblId, -2);
+
+    const auto exported = MldFileExporter{}.exportFile(parsed, MldExportOptions{ .platform = TargetPlatform::GameCube });
+    ASSERT_GT(exported.size(), kEntryOffset + 0x07U);
+    EXPECT_EQ(exported[kEntryOffset + 0x04U], 0xFFU);
+    EXPECT_EQ(exported[kEntryOffset + 0x05U], 0xFFU);
+    EXPECT_EQ(exported[kEntryOffset + 0x06U], 0xFFU);
+    EXPECT_EQ(exported[kEntryOffset + 0x07U], 0xFEU);
+}
+
 TEST(MldEndian, ExportGameCubeToDreamcastPreservesSemanticIrAndFourCcBytes) {
     MldParser parser;
     const auto be = parser.parseFile(makeMinimalMld(Endian::Big));
