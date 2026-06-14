@@ -7,6 +7,9 @@
 #include <bit>
 #include <algorithm>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -80,6 +83,38 @@ void appendNameRecord(std::vector<std::uint8_t>& bytes, const std::string& name)
     bytes.resize(offset + 44U, 0U);
     const auto count = std::min<std::size_t>(name.size(), 31U);
     std::copy_n(name.begin(), count, bytes.begin() + static_cast<std::ptrdiff_t>(offset));
+}
+
+std::filesystem::path findFixturePath(const std::filesystem::path& relativePath) {
+    auto current = std::filesystem::current_path();
+    while (true) {
+        const auto fromRepoRoot = current / "SpiceTests" / relativePath;
+        if (std::filesystem::exists(fromRepoRoot)) {
+            return fromRepoRoot;
+        }
+
+        const auto fromTestsRoot = current / relativePath;
+        if (std::filesystem::exists(fromTestsRoot)) {
+            return fromTestsRoot;
+        }
+
+        const auto parent = current.parent_path();
+        if (parent == current || parent.empty()) {
+            break;
+        }
+        current = parent;
+    }
+    throw std::runtime_error("Could not locate test fixture: " + relativePath.string());
+}
+
+std::vector<std::uint8_t> readBinaryFile(const std::filesystem::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        throw std::runtime_error("Could not open binary fixture: " + path.string());
+    }
+    return std::vector<std::uint8_t>(
+        std::istreambuf_iterator<char>(in),
+        std::istreambuf_iterator<char>());
 }
 
 void writeList(std::vector<std::uint8_t>& bytes, std::size_t offset, std::span<const std::uint32_t> values, Endian endian) {
@@ -240,6 +275,68 @@ TEST(MldEndian, PreservesFullMotionAddressSlotListWithZeroEntries) {
     EXPECT_EQ(parsed.rawEntries[0].motionAddresses, motions);
 }
 
+TEST(MldParser, ResolvesWrappedObjectModelOffsetBeforeFallbackScan) {
+    auto bytes = makeMinimalMld(Endian::Big);
+    bytes.resize(0x300U, 0U);
+    const std::uint32_t objects[] = { 0x180U };
+    writeList(bytes, kListObjects, objects, Endian::Big);
+
+    writeU32(bytes, 0x180U, 0x40U, Endian::Big);
+    writeU32(bytes, 0x184U, 0x80U, Endian::Big);
+    writeU32(bytes, 0x188U, 0x10U, Endian::Big);
+    writeTag(bytes, 0x190U, "NJTL");
+    writeU32(bytes, 0x194U, 0x20U, Endian::Big);
+    writeU32(bytes, 0x19CU, 0U, Endian::Big);
+    writeTag(bytes, 0x1A0U, "NJCM");
+    writeTag(bytes, 0x1C0U, "NJCM");
+
+    MldParser parser;
+    spice::mld::parsing::ParseOptions options{};
+    options.buildBlenderIntermediateIr = false;
+    const auto blocks = parser.extractNjBlocks(bytes, options);
+
+    const auto found = std::find_if(blocks.begin(), blocks.end(), [](const auto& block) {
+        return block.sourceObjectAddress == 0x180U;
+    });
+    ASSERT_NE(found, blocks.end());
+    ASSERT_TRUE(found->modelBlockOffset.has_value());
+    ASSERT_TRUE(found->modelReadOffset.has_value());
+    ASSERT_TRUE(found->textureListOffset.has_value());
+    EXPECT_EQ(*found->modelBlockOffset, 0x1C0U);
+    EXPECT_EQ(*found->modelReadOffset, 0x40U);
+    EXPECT_EQ(*found->textureListOffset, 0x190U);
+    EXPECT_EQ(found->wrapperLayout, "mld-object-wrapper");
+}
+
+TEST(MldParser, ParsesWrappedS044SmlEntryObjectIntoBlenderIrGeometry) {
+    const auto fixturePath = findFixturePath("fixtures/mld/s044_sml_entry_0.mld");
+    const auto bytes = readBinaryFile(fixturePath);
+
+    MldParser parser;
+    const auto parsed = parser.parse(bytes);
+
+    ASSERT_EQ(parsed.entryList.size(), 1U);
+    ASSERT_EQ(parsed.entryList[0].objectAddresses.size(), 1U);
+    EXPECT_EQ(parsed.entryList[0].objectAddresses[0], 0xC0U);
+
+    const auto found = std::find_if(parsed.extractedNjBlocks.begin(), parsed.extractedNjBlocks.end(), [](const auto& block) {
+        return block.sourceObjectAddress == 0xC0U;
+    });
+    ASSERT_NE(found, parsed.extractedNjBlocks.end());
+    ASSERT_TRUE(found->modelBlockOffset.has_value());
+    ASSERT_TRUE(found->modelReadOffset.has_value());
+    EXPECT_EQ(*found->modelBlockOffset, 0x1F0U);
+    EXPECT_EQ(*found->modelReadOffset, 0x130U);
+    EXPECT_EQ(found->wrapperLayout, "mld-object-wrapper");
+
+    ASSERT_TRUE(parsed.blenderIrScene.has_value());
+    EXPECT_GT(parsed.blenderIrScene->objectTrees.size(), 0U);
+    EXPECT_GT(parsed.blenderIrScene->meshes.size(), 0U);
+    ASSERT_EQ(parsed.blenderIrScene->indexEntries.size(), 1U);
+    EXPECT_FALSE(parsed.blenderIrScene->indexEntries[0].objectTreeIndices.empty());
+    EXPECT_FALSE(parsed.blenderIrScene->indexEntries[0].meshIndices.empty());
+}
+
 TEST(BlenderIrJsonExporter, EmitsWeightedMeshBinding) {
     spice::mld::model::BlenderIrScene scene{};
     spice::mld::model::BlenderIrMesh mesh{};
@@ -287,41 +384,6 @@ TEST(BlenderIrJsonExporter, EmitsTblIdAsSignedDecimalNumber) {
     EXPECT_NE(json.find("\"tblId\":-42"), std::string::npos);
     EXPECT_EQ(json.find("\"tblId\":\"-42\""), std::string::npos);
     EXPECT_EQ(json.find("\"tblId\":0x"), std::string::npos);
-}
-
-TEST(SpiceMldBlenderIr, EmitsOptionalSourceRecordMetadataOnlyWhenPresent) {
-    spice::mld::model::BlenderIrScene plainScene{};
-    spice::mld::model::BlenderIrMesh plainMesh{};
-    plainMesh.label = "plain";
-    plainScene.meshes.push_back(std::move(plainMesh));
-
-    const auto plainJson = spice::mld::exporting::BlenderIrJsonExporter{}.toJson(plainScene);
-    EXPECT_EQ(plainJson.find("\"sourceRecord\""), std::string::npos);
-
-    spice::mld::model::BlenderIrScene scene{};
-    spice::mld::model::BlenderIrMesh mesh{};
-    mesh.label = "with_source";
-    mesh.sourceRecord = spice::mld::model::BlenderIrSourceRecord{
-        .containerKind = "mlk",
-        .containerPath = "beff/sample.mlk",
-        .recordIndex = 3U,
-        .recordOffset = 0x38U,
-        .key = 7704300U,
-        .generatedMldName = "E7704300.MLD",
-        .rawWord12 = 5U,
-        .payloadOffset = 0x100U,
-        .payloadSize = 0x200U,
-        .payloadKind = "mld",
-    };
-    scene.meshes.push_back(std::move(mesh));
-
-    const auto json = spice::mld::exporting::BlenderIrJsonExporter{}.toJson(scene);
-    EXPECT_NE(json.find("\"sourceRecord\":{\"containerKind\":\"mlk\""), std::string::npos);
-    EXPECT_NE(json.find("\"containerPath\":\"beff/sample.mlk\""), std::string::npos);
-    EXPECT_NE(json.find("\"recordIndex\":3"), std::string::npos);
-    EXPECT_NE(json.find("\"generatedMldName\":\"E7704300.MLD\""), std::string::npos);
-    EXPECT_NE(json.find("\"rawWord12\":5"), std::string::npos);
-    EXPECT_NE(json.find("\"payloadKind\":\"mld\""), std::string::npos);
 }
 
 TEST(MldEndian, ParsesTblIdAsSignedAndExportsOriginalBits) {

@@ -33,6 +33,7 @@ SpiceFileParsing/inputs/*
 !SpiceFileParsing/inputs/.gitignore
 SpiceSstSml/research/
 SpiceMlk/research/
+SpiceMlk/annotations/
 planning/Analysis/
 
 # Python/cache artifacts
