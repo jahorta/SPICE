@@ -10,6 +10,7 @@ Included projects:
 - SpiceGvm
 - SpiceSCT
 - SpiceMLD
+- SpiceMll
 - SpiceContentGraph
 - SpiceTests
 - SpiceFileParsing

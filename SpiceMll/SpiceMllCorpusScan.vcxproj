@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{D528E9A2-9713-40A7-A7A1-21AF843E559E}</ProjectGuid>
-    <RootNamespace>SpiceTests</RootNamespace>
+    <ProjectGuid>{F41F4DF4-02C0-4925-BBE5-65044F73B524}</ProjectGuid>
+    <RootNamespace>SpiceMllCorpusScan</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -57,21 +57,23 @@
   <ImportGroup Label="Shared" />
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\ThirdParty.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\ThirdParty.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\ThirdParty.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\ThirdParty.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <IntDir>$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IntDir>$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -81,8 +83,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
-      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)Sa3Dport;$(SolutionDir)third-party\googletest-1.17.0\googletest\include;$(SolutionDir)third-party\googletest-1.17.0\googletest;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -100,8 +101,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
-      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)Sa3Dport;$(SolutionDir)third-party\googletest-1.17.0\googletest\include;$(SolutionDir)third-party\googletest-1.17.0\googletest;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -111,67 +111,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\third-party\googletest-1.17.0\googletest\src\gtest-all.cc" />
-    <ClCompile Include="run_tests.cpp" />
-    <ClCompile Include="test_aklz.cpp" />
-    <ClCompile Include="test_content_graph.cpp" />
-    <ClCompile Include="test_ect_parser.cpp" />
-    <ClCompile Include="test_gvr_image_ir.cpp" />
-    <ClCompile Include="test_mld_gvr_format_inventory.cpp" />
-    <ClCompile Include="test_mld_endian.cpp" />
-    <ClCompile Include="test_mlk_blender_ir_export.cpp" />
-    <ClCompile Include="test_mlk_corpus_export.cpp" />
-    <ClCompile Include="test_mlk_parser.cpp" />
-    <ClCompile Include="test_mlk_scanner.cpp" />
-    <ClCompile Include="test_mll_corpus_export.cpp" />
-    <ClCompile Include="test_mll_parser.cpp" />
-    <ClCompile Include="test_sct_ir.cpp" />
-    <ClCompile Include="test_sct_real_fixtures.cpp" />
-    <ClCompile Include="test_sct_roundtrip.cpp" />
-    <ClCompile Include="test_sst_sml_parser.cpp" />
-    <ClCompile Include="test_sa3dport_stage1.cpp" />
-    <ClCompile Include="test_sa3dport_stage2.cpp" />
-    <ClCompile Include="test_sa3dport_stage3.cpp" />
-    <ClCompile Include="test_sa3dport_stage4.cpp" />
-    <ClCompile Include="test_sa3dport_stage5.cpp" />
-    <ClCompile Include="test_spicecore.cpp" />
+    <ClCompile Include="MllCorpusScanMain.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="fixtures\mld\s044_sml_entry_0.mld" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Compression\Compression.vcxproj">
-      <Project>{4F68E37C-185F-4DE8-A4D7-647E6F3659C4}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\SpiceCore\SpiceCore.vcxproj">
-      <Project>{6F9D8280-6F7B-4237-9D4A-D9A09E7A1B2E}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\SpiceEct\SpiceEct.vcxproj">
-      <Project>{81EF38D9-DF34-427B-A78A-73E38A14DAD8}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Sa3Dport\Sa3Dport.vcxproj">
-      <Project>{DF6013F5-9B25-4250-A0F7-EAF86E7BE9D7}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\SpiceContentGraph\SpiceContentGraph.vcxproj">
-      <Project>{208F502E-EBB9-4AF0-A886-356757A46D41}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\SpiceGvm\SpiceGvm.vcxproj">
-      <Project>{A3D377F9-43B8-4A4B-8C78-8F069B98E6F1}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\SpiceMLD\SpiceMLD.vcxproj">
-      <Project>{C44D37F8-61F5-4A1C-B983-16D79FBC9954}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\SpiceMlk\SpiceMlk.vcxproj">
-      <Project>{67A98008-8BB7-4BC4-99B9-9517F67C53CC}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\SpiceMll\SpiceMll.vcxproj">
+    <ProjectReference Include="SpiceMll.vcxproj">
       <Project>{3F9BA4A5-F9B0-4293-97A1-9A7E1F8E7F86}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\SpiceSCT\SpiceSCT.vcxproj">
-      <Project>{8EF58CAF-3DFA-46B9-9197-FE71052A15EB}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\SpiceSstSml\SpiceSstSml.vcxproj">
-      <Project>{7B2AFA73-419B-4B4C-873D-6B6767308D2F}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
