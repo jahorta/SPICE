@@ -386,6 +386,44 @@ TEST(BlenderIrJsonExporter, EmitsTblIdAsSignedDecimalNumber) {
     EXPECT_EQ(json.find("\"tblId\":0x"), std::string::npos);
 }
 
+TEST(BlenderIrJsonExporter, EmitsValueBearingAnimationChannels) {
+    spice::mld::model::BlenderIrScene scene{};
+    spice::mld::model::BlenderIrAnimation animation{};
+    animation.sourceEntryId = 4;
+    animation.tableIndex = 0;
+    animation.sourceObjectAddress = 0x1000;
+    animation.sourceMotionAddress = 0x2000;
+    animation.motionSlot = 3;
+    animation.objectTreeIndex = 1;
+    animation.nodeCount = 2;
+    animation.frameCount = 23;
+    animation.interpolationMode = "linear";
+
+    spice::mld::model::BlenderIrAnimationChannel roll{};
+    roll.nodeIndex = 1;
+    roll.channel = "roll";
+    roll.valueType = "float";
+    roll.floatValues.push_back({.frame = 7, .value = 1.25f});
+    animation.channels.push_back(std::move(roll));
+
+    spice::mld::model::BlenderIrAnimationChannel vertex{};
+    vertex.nodeIndex = 1;
+    vertex.channel = "vertex";
+    vertex.valueType = "vec3Array";
+    vertex.vectorArrayValues.push_back({
+        .frame = 9,
+        .label = "shape-a",
+        .values = {{.x = 1.0f, .y = 2.0f, .z = 3.0f}},
+    });
+    animation.channels.push_back(std::move(vertex));
+    scene.animations.push_back(std::move(animation));
+
+    const auto json = spice::mld::exporting::BlenderIrJsonExporter{}.toJson(scene);
+    EXPECT_NE(json.find("\"channels\":[{\"nodeIndex\":1,\"channel\":\"roll\",\"valueType\":\"float\",\"keyframes\":[{\"frame\":7,\"value\":1.25}]"), std::string::npos);
+    EXPECT_NE(json.find("\"channel\":\"vertex\",\"valueType\":\"vec3Array\""), std::string::npos);
+    EXPECT_NE(json.find("\"frame\":9,\"label\":\"shape-a\",\"values\":[[1,2,3]]"), std::string::npos);
+}
+
 TEST(MldEndian, ParsesTblIdAsSignedAndExportsOriginalBits) {
     auto bytes = makeMinimalMld(Endian::Big);
     writeU32(bytes, kEntryOffset + 0x04U, 0xFFFFFFFEU, Endian::Big);
