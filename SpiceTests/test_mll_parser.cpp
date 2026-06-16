@@ -5,8 +5,10 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <filesystem>
+#include <stdexcept>
 #include <vector>
 
 namespace {
@@ -65,6 +67,26 @@ std::vector<std::uint8_t> makeNormalMllFixture() {
     bytes[0x101U] = 'O';
     bytes[0x102U] = 'F';
     bytes[0x103U] = '0';
+    return bytes;
+}
+
+std::vector<std::uint8_t> makeTightlyPackedMllFixture() {
+    std::vector<std::uint8_t> bytes(0x58U, 0U);
+    writeBeU32(bytes, 0x00U, 0x0000ffffU);
+    writeBeU32(bytes, 0x04U, 0x0002ffffU);
+    writeName(bytes, 0x08U, "first.bin");
+    writeBeU32(bytes, 0x1cU, 0x00000048U);
+    writeBeU32(bytes, 0x20U, 0x00000008U);
+    writeBeU32(bytes, 0x24U, 0xffffffffU);
+    writeName(bytes, 0x28U, "second.bin");
+    writeBeU32(bytes, 0x3cU, 0x00000050U);
+    writeBeU32(bytes, 0x40U, 0x00000008U);
+    writeBeU32(bytes, 0x44U, 0xffffffffU);
+
+    for (std::uint8_t i = 0U; i < 8U; ++i) {
+        bytes[0x48U + i] = static_cast<std::uint8_t>(0xa0U + i);
+        bytes[0x50U + i] = static_cast<std::uint8_t>(0xb0U + i);
+    }
     return bytes;
 }
 
@@ -166,6 +188,28 @@ std::filesystem::path usDiscRoot() {
     return {};
 }
 
+std::vector<std::filesystem::path> regionalDiscRoots() {
+    std::vector<std::filesystem::path> roots{};
+    for (const auto& root : {
+        std::filesystem::path("D:/SoAGC/2002-12-19-gc-us-final_Skies_of_Arcadia_Legends"),
+        std::filesystem::path("D:/SoAGC/2003-03-05-gc-eu-final_Skies_of_Arcadia_Legends"),
+        std::filesystem::path("D:/SoAGC/2002-11-12-gc-jp-final_Eternal_Arcadia_Legends"),
+    }) {
+        if (std::filesystem::exists(root)) {
+            roots.push_back(root);
+        }
+    }
+    return roots;
+}
+
+bool hasMllExtension(const std::filesystem::path& path) {
+    auto extension = path.extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(), [](const unsigned char value) {
+        return static_cast<char>(std::tolower(value));
+    });
+    return extension == ".mll";
+}
+
 } // namespace
 
 TEST(SpiceMllParser, ParsesNamedOffsetSizeMemberTable) {
@@ -187,6 +231,176 @@ TEST(SpiceMllParser, ParsesNamedOffsetSizeMemberTable) {
     EXPECT_EQ(parsed.members[0].payloadKind, spice::mll::MllPayloadKind::MldFile);
     EXPECT_TRUE(parsed.members[0].embeddedMldHeader.plausible);
     EXPECT_EQ(parsed.members[1].payloadKind, spice::mll::MllPayloadKind::Pof0);
+}
+
+TEST(SpiceMllArchiveIr, BuildsContainerIrWithRawRecordFieldsAndPayloadViews) {
+    const auto fixture = makeTightlyPackedMllFixture();
+    const auto parsed = spice::mll::MllParser::parse(fixture, "tight.mll");
+
+    const auto ir = spice::mll::MllArchiveIrBuilder{}.build(parsed);
+
+    EXPECT_TRUE(ir.ok());
+    EXPECT_EQ(ir.sourcePath, "tight.mll");
+    EXPECT_FALSE(ir.sourceWasCompressedAklz);
+    EXPECT_EQ(ir.rawSize, fixture.size());
+    EXPECT_EQ(ir.decodedSize, fixture.size());
+    EXPECT_EQ(ir.decodedBytes, fixture);
+    EXPECT_EQ(ir.header.headerWord0, 0x0000ffffU);
+    EXPECT_EQ(ir.header.countWord, 0x0002ffffU);
+    EXPECT_EQ(ir.header.memberCount, 2U);
+    EXPECT_TRUE(ir.header.supported);
+    ASSERT_EQ(ir.members.size(), 2U);
+
+    const auto& first = ir.members[0];
+    EXPECT_EQ(first.index, 0U);
+    EXPECT_EQ(first.displayName, "first.bin");
+    EXPECT_EQ(first.record.recordOffset, 0x08U);
+    EXPECT_EQ(first.record.rawName[0], static_cast<std::uint8_t>('f'));
+    EXPECT_EQ(first.record.rawName[9], 0U);
+    EXPECT_EQ(first.record.payloadOffset, 0x48U);
+    EXPECT_EQ(first.record.payloadSize, 0x08U);
+    EXPECT_EQ(first.record.rawWord1c, 0xffffffffU);
+    EXPECT_EQ(first.payload.offset, 0x48U);
+    EXPECT_EQ(first.payload.size, 0x08U);
+    EXPECT_TRUE(first.payload.inBounds);
+
+    const auto payload = ir.payloadBytes(0U);
+    ASSERT_EQ(payload.size(), 8U);
+    EXPECT_TRUE(std::equal(payload.begin(), payload.end(), fixture.begin() + 0x48U));
+}
+
+TEST(SpiceMllArchiveIr, SummarizesPayloadProbeSignalsForRouting) {
+    const auto parsed = spice::mll::MllParser::parse(makeMllFixtureWithMldObjectListProbe(), "probe.mll");
+
+    const auto ir = spice::mll::MllArchiveIrBuilder{}.build(parsed);
+
+    ASSERT_EQ(ir.members.size(), 2U);
+    const auto& mld = ir.members[0];
+    EXPECT_EQ(mld.payloadKind, spice::mll::MllPayloadKind::MldFile);
+    EXPECT_EQ(mld.probeSummary.payloadSignature, "....");
+    EXPECT_TRUE(mld.probeSummary.mldHeaderPlausible);
+    EXPECT_TRUE(mld.probeSummary.textureTablePresent);
+    EXPECT_EQ(mld.probeSummary.textureCount, 1U);
+    EXPECT_TRUE(mld.probeSummary.allTexturesParsed);
+    EXPECT_TRUE(mld.probeSummary.allTexturesDecoded);
+    EXPECT_TRUE(mld.probeSummary.allTexturesHaveGlobalIndex);
+    EXPECT_TRUE(mld.probeSummary.preTextureTablePresent);
+}
+
+TEST(SpiceMllArchiveIr, PayloadBytesRejectsInvalidMemberIndex) {
+    const auto parsed = spice::mll::MllParser::parse(makeTightlyPackedMllFixture(), "tight.mll");
+    const auto ir = spice::mll::MllArchiveIrBuilder{}.build(parsed);
+
+    EXPECT_THROW((void)ir.payloadBytes(2U), std::out_of_range);
+}
+
+TEST(SpiceMllBinaryExporter, RebuildsTightlyPackedDecodedMllByteIdentically) {
+    const auto fixture = makeTightlyPackedMllFixture();
+    const auto parsed = spice::mll::MllParser::parse(fixture, "tight.mll");
+
+    ASSERT_TRUE(parsed.ok());
+    ASSERT_TRUE(parsed.supported);
+    ASSERT_EQ(parsed.originalDecodedBytes, fixture);
+
+    const auto rebuilt = spice::mll::MllBinaryExporter{}.exportFile(parsed);
+
+    EXPECT_EQ(rebuilt, fixture);
+}
+
+TEST(SpiceMllBinaryExporter, CanAklzCompressRebuiltMll) {
+    const auto fixture = makeTightlyPackedMllFixture();
+    const auto parsed = spice::mll::MllParser::parse(fixture, "tight.mll");
+    spice::mll::MllExportOptions options{};
+    options.compressAklz = true;
+
+    const auto rebuilt = spice::mll::MllBinaryExporter{}.exportFile(parsed, options);
+    const auto reparsed = spice::mll::MllParser::parse(rebuilt, "compressed.mll");
+
+    ASSERT_TRUE(reparsed.ok());
+    EXPECT_TRUE(reparsed.sourceWasCompressedAklz);
+    EXPECT_EQ(reparsed.originalDecodedBytes, fixture);
+}
+
+TEST(SpiceMllBinaryExporter, RejectsGappedSourcePayloadsByDefault) {
+    const auto fixture = makeNormalMllFixture();
+    const auto parsed = spice::mll::MllParser::parse(fixture, "gapped.mll");
+
+    ASSERT_TRUE(parsed.ok());
+    ASSERT_TRUE(parsed.supported);
+
+    EXPECT_THROW((void)spice::mll::MllBinaryExporter{}.exportFile(parsed), std::runtime_error);
+}
+
+TEST(SpiceMllBinaryExporter, ReplacesSameSizeMemberPayload) {
+    const auto fixture = makeTightlyPackedMllFixture();
+    const auto parsed = spice::mll::MllParser::parse(fixture, "tight.mll");
+    spice::mll::MllExportOptions options{};
+    options.payloadReplacements.push_back(spice::mll::MllPayloadReplacement{
+        1U,
+        std::vector<std::uint8_t>{ 0xc0U, 0xc1U, 0xc2U, 0xc3U, 0xc4U, 0xc5U, 0xc6U, 0xc7U },
+    });
+
+    const auto rebuilt = spice::mll::MllBinaryExporter{}.exportFile(parsed, options);
+    const auto reparsed = spice::mll::MllParser::parse(rebuilt, "rebuilt.mll");
+
+    ASSERT_EQ(rebuilt.size(), fixture.size());
+    EXPECT_TRUE(std::equal(rebuilt.begin() + 0x48U, rebuilt.begin() + 0x50U, fixture.begin() + 0x48U));
+    EXPECT_TRUE(std::equal(options.payloadReplacements[0].payload.begin(),
+        options.payloadReplacements[0].payload.end(),
+        rebuilt.begin() + 0x50U));
+    ASSERT_TRUE(reparsed.ok());
+    ASSERT_EQ(reparsed.members.size(), 2U);
+    EXPECT_EQ(reparsed.members[0].payloadOffset, 0x48U);
+    EXPECT_EQ(reparsed.members[0].payloadSize, 0x08U);
+    EXPECT_EQ(reparsed.members[1].payloadOffset, 0x50U);
+    EXPECT_EQ(reparsed.members[1].payloadSize, 0x08U);
+}
+
+TEST(SpiceMllBinaryExporter, RejectsPayloadResizeWithoutExplicitPermission) {
+    const auto parsed = spice::mll::MllParser::parse(makeTightlyPackedMllFixture(), "tight.mll");
+    spice::mll::MllExportOptions options{};
+    options.payloadReplacements.push_back(spice::mll::MllPayloadReplacement{
+        0U,
+        std::vector<std::uint8_t>{ 0xd0U, 0xd1U, 0xd2U, 0xd3U, 0xd4U, 0xd5U, 0xd6U, 0xd7U, 0xd8U },
+    });
+
+    EXPECT_THROW((void)spice::mll::MllBinaryExporter{}.exportFile(parsed, options), std::runtime_error);
+}
+
+TEST(SpiceMllBinaryExporter, RecomputesOffsetsWhenResizeIsExplicitlyAllowed) {
+    const auto parsed = spice::mll::MllParser::parse(makeTightlyPackedMllFixture(), "tight.mll");
+    spice::mll::MllExportOptions options{};
+    options.allowPayloadResize = true;
+    options.payloadReplacements.push_back(spice::mll::MllPayloadReplacement{
+        0U,
+        std::vector<std::uint8_t>{ 0xd0U, 0xd1U, 0xd2U, 0xd3U, 0xd4U, 0xd5U, 0xd6U, 0xd7U, 0xd8U },
+    });
+
+    const auto rebuilt = spice::mll::MllBinaryExporter{}.exportFile(parsed, options);
+    const auto reparsed = spice::mll::MllParser::parse(rebuilt, "resized.mll");
+
+    ASSERT_TRUE(reparsed.ok());
+    ASSERT_EQ(reparsed.members.size(), 2U);
+    EXPECT_EQ(reparsed.members[0].payloadOffset, 0x48U);
+    EXPECT_EQ(reparsed.members[0].payloadSize, 0x09U);
+    EXPECT_EQ(reparsed.members[1].payloadOffset, 0x51U);
+    EXPECT_EQ(reparsed.members[1].payloadSize, 0x08U);
+    EXPECT_EQ(rebuilt.size(), 0x59U);
+    EXPECT_TRUE(std::equal(options.payloadReplacements[0].payload.begin(),
+        options.payloadReplacements[0].payload.end(),
+        rebuilt.begin() + 0x48U));
+}
+
+TEST(SpiceMllBinaryExporter, RejectsUnknownRecordRawWordByDefault) {
+    auto fixture = makeTightlyPackedMllFixture();
+    writeBeU32(fixture, 0x24U, 0U);
+    const auto parsed = spice::mll::MllParser::parse(fixture, "unknown-word.mll");
+
+    ASSERT_TRUE(parsed.ok());
+    ASSERT_TRUE(parsed.supported);
+    ASSERT_EQ(parsed.members[0].rawWord1c, 0U);
+
+    EXPECT_THROW((void)spice::mll::MllBinaryExporter{}.exportFile(parsed), std::runtime_error);
 }
 
 TEST(SpiceMllParser, ProbesEmbeddedMldObjectListFields) {
@@ -385,6 +599,7 @@ TEST(SpiceMllParser, ParsesAklzCompressedInput) {
     EXPECT_TRUE(parsed.sourceWasCompressedAklz);
     EXPECT_EQ(parsed.rawSize, compressed.bytes.size());
     EXPECT_EQ(parsed.decodedSize, fixture.size());
+    EXPECT_EQ(parsed.originalDecodedBytes, fixture);
     EXPECT_EQ(parsed.members.size(), 2U);
 }
 
@@ -403,4 +618,54 @@ TEST(SpiceMllParserRealFiles, UsKnownMllCanBeOpenedAsResearchProbe) {
     EXPECT_GT(parsed.rawSize, 0U);
     EXPECT_GT(parsed.decodedSize, 0U);
     EXPECT_EQ(parsed.sourcePath, sample.string());
+}
+
+TEST(SpiceMllParserRealFiles, RegionalMllCorpusDecodedRoundTripsThroughExporter) {
+    const auto roots = regionalDiscRoots();
+    if (roots.empty()) {
+        GTEST_SKIP() << "No regional Skies of Arcadia Legends dumps are present.";
+    }
+
+    std::size_t fileCount = 0U;
+    std::size_t supportedCount = 0U;
+    spice::mll::MllBinaryExporter exporter{};
+    for (const auto& root : roots) {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
+            if (!entry.is_regular_file() || !hasMllExtension(entry.path())) {
+                continue;
+            }
+
+            ++fileCount;
+            const auto path = entry.path();
+            const auto parsed = spice::mll::MllParser::parseFile(path);
+            if (!parsed.supported) {
+                ADD_FAILURE() << "Unsupported MLL in round-trip corpus: " << path.string();
+                continue;
+            }
+            ++supportedCount;
+
+            const auto rebuilt = exporter.exportFile(parsed);
+            EXPECT_EQ(rebuilt, parsed.originalDecodedBytes)
+                << "Decoded no-op rebuild mismatch: " << path.string();
+
+            const auto reparsed = spice::mll::MllParser::parse(rebuilt, path.string() + "#rebuilt");
+            EXPECT_TRUE(reparsed.ok()) << "Rebuilt parse failed: " << path.string();
+            EXPECT_TRUE(reparsed.supported) << "Rebuilt parse was unsupported: " << path.string();
+            EXPECT_EQ(reparsed.originalDecodedBytes, parsed.originalDecodedBytes)
+                << "Rebuilt parse decoded bytes changed: " << path.string();
+
+            spice::mll::MllExportOptions compressedOptions{};
+            compressedOptions.compressAklz = true;
+            const auto compressed = exporter.exportFile(parsed, compressedOptions);
+            const auto reparsedCompressed = spice::mll::MllParser::parse(compressed, path.string() + "#compressed-rebuilt");
+            EXPECT_TRUE(reparsedCompressed.ok()) << "Compressed rebuilt parse failed: " << path.string();
+            EXPECT_TRUE(reparsedCompressed.sourceWasCompressedAklz)
+                << "Compressed rebuilt file was not detected as AKLZ: " << path.string();
+            EXPECT_EQ(reparsedCompressed.originalDecodedBytes, parsed.originalDecodedBytes)
+                << "Compressed rebuilt decoded bytes changed: " << path.string();
+        }
+    }
+
+    EXPECT_GT(fileCount, 0U);
+    EXPECT_EQ(supportedCount, fileCount);
 }
