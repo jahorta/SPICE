@@ -196,6 +196,13 @@ spice::gvm::model::RgbaImage makeImage(std::uint32_t width, std::uint32_t height
     return image;
 }
 
+std::filesystem::path testOutDir(const char* name) {
+    auto dir = std::filesystem::temp_directory_path() / "spice_mld_endian_tests" / name;
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    return dir;
+}
+
 std::vector<std::uint8_t> encodeTexture(
     const spice::gvm::model::RgbaImage& image,
     spice::gvm::model::TextureFormat format,
@@ -545,6 +552,51 @@ TEST(MldTextureArchiveRebuild, ReplacesWithLargerTextureAndPreservesNames) {
     EXPECT_EQ(reparsed.textureArchive->entries[1].gvrDataSize, second.size());
     EXPECT_EQ(reparsed.textureArchive->entries[0].sourceFormat, "RGBA8");
     EXPECT_EQ(reparsed.textureArchive->archivePrefixBytes, parsed.textureArchive->archivePrefixBytes);
+}
+
+TEST(MldTextureArchiveRebuild, PreservesExactTextureGvrPayloadsForExtraction) {
+    const auto first = encodeTexture(makeImage(8U, 8U, 3U), spice::gvm::model::TextureFormat::I4);
+    const auto second = encodeTexture(makeImage(8U, 8U, 7U), spice::gvm::model::TextureFormat::RGB565);
+
+    MldParser parser;
+    const auto parsed = parser.parseFile(makeTexturedMld(first, second));
+    ASSERT_TRUE(parsed.textureArchive.has_value());
+    ASSERT_EQ(parsed.textureArchive->entries.size(), 2U);
+
+    const auto& firstEntry = parsed.textureArchive->entries[0];
+    const auto& secondEntry = parsed.textureArchive->entries[1];
+    EXPECT_EQ(firstEntry.archiveTextureIndex, 0U);
+    EXPECT_EQ(firstEntry.textureName, "tex_a");
+    EXPECT_EQ(firstEntry.gvrDataSize, first.size());
+    EXPECT_EQ(firstEntry.gvrData, first);
+    EXPECT_EQ(secondEntry.archiveTextureIndex, 1U);
+    EXPECT_EQ(secondEntry.textureName, "tex_b");
+    EXPECT_EQ(secondEntry.gvrDataSize, second.size());
+    EXPECT_EQ(secondEntry.gvrData, second);
+}
+
+TEST(MldTextureArchiveRebuild, ExtractedTextureGvrPayloadDecodesToPng) {
+    const auto dir = testOutDir("texture_gvr_to_png");
+    const auto image = makeImage(8U, 8U, 17U);
+    const auto first = encodeTexture(image, spice::gvm::model::TextureFormat::RGBA8);
+    const auto second = encodeTexture(makeImage(8U, 8U, 7U), spice::gvm::model::TextureFormat::RGB565);
+
+    MldParser parser;
+    const auto parsed = parser.parseFile(makeTexturedMld(first, second));
+    ASSERT_TRUE(parsed.textureArchive.has_value());
+    ASSERT_EQ(parsed.textureArchive->entries.size(), 2U);
+
+    const auto& firstEntry = parsed.textureArchive->entries[0];
+    const auto pngPath = dir / "tex_a.png";
+    const auto exported = spice::gvm::ir::exportGvrPng(
+        std::span<const std::uint8_t>(firstEntry.gvrData.data(), firstEntry.gvrData.size()),
+        pngPath);
+    const auto decoded = spice::gvm::image::readPngRgba8(pngPath);
+
+    EXPECT_EQ(exported.texture.textureFormat, spice::gvm::model::TextureFormat::RGBA8);
+    EXPECT_EQ(decoded.width, image.width);
+    EXPECT_EQ(decoded.height, image.height);
+    EXPECT_EQ(decoded.rgba8, image.rgba8);
 }
 
 TEST(MldTextureArchiveRebuild, ReplacesWithSmallerTextureWithoutPadding) {
