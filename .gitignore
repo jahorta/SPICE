@@ -31,13 +31,19 @@ SpiceFileParsing/decompressed_inputs/*
 !SpiceFileParsing/decompressed_inputs/.gitignore
 SpiceFileParsing/inputs/*
 !SpiceFileParsing/inputs/.gitignore
+SpiceBin/research/
+SpiceMll/research/
 SpiceMLD/research/
 SpiceSstSml/research/
 SpiceMlk/research/
 SpiceStd/research/
 /research/
 SpiceMlk/annotations/
-planning/Analysis/
+planning/Analysis/*
+!planning/Analysis/2026-06-16_bin_ghidra_handler_trace/
+!planning/Analysis/2026-06-16_bin_ghidra_handler_trace/summary.md
+!planning/Analysis/2026-06-20_field_x_menu_bin_annotation/
+!planning/Analysis/2026-06-20_field_x_menu_bin_annotation/20260620_field_x_menu_bin_annotation_guide.txt
 
 # Python/cache artifacts
 __pycache__/

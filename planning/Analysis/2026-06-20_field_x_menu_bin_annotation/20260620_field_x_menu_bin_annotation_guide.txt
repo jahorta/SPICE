@@ -1,0 +1,356 @@
+Ghidra annotation guide for field X-menu HRSBin status layout
+
+Created: 2026-06-20
+Project: C:\Users\jahor\source\repos\jahorta\SPICE
+Primary research folder: SpiceBin\research\2026-06-20_field_hrsbin_menu_controller
+Tracked docs: Docs\BinFileLayout.md and Docs\BinFileRecords.md
+
+Purpose
+  - This document is a Ghidra annotation guide for the field X-menu opened by pressing X while moving around in field gameplay.
+  - The confirmed runtime file is /field/HrsBin_Status.mll, not loose /field/HRSBin.bin.
+  - Suggested names are intentionally descriptive. Treat the high-confidence controller, loader, and global names as good candidates for Ghidra labels.
+  - Record-level names are tracked in Docs\BinFileRecords.md. This guide focuses on controller functions, status-bank globals, and object/control fields that make those record names understandable in Ghidra.
+
+
+1. High-confidence correction
+
+Do not label loose field/HRSBin.bin as the field X-menu status layout
+  - Current status: negative static evidence.
+  - Evidence:
+    - menu_listener at 801920ac loads /field/HrsBin_Status.mll for the X-menu.
+    - Current decompile-term searches find /field/HrsBin_Hakken.mll, /field/HrsBin_sbp.mll, and /field/HrsBin_Status.mll, but no DOL reference to HRSBin.bin or HRSBin.mld.
+    - The loose-file indexed wrapper FUN_801d6b58 has one current xref in this trace set: FUN_800e3594 loading /field/HRS_BEND.BIN.
+    - US corpus searches find HRSBin.bin and HRSBin.mld in directory/TOC metadata, but not in a script-side load reference.
+  - Suggested annotation note:
+    - Loose field/HRSBin.bin is a valid 34-record HRSBin-style indexed layout, but current evidence does not prove the field X-menu consumes it.
+
+
+2. Field X-menu root controller and lifecycle
+
+Field X-menu listener
+  - Address: 801920ac
+  - Current label: menu_listener
+  - Suggested label: FieldStatusMenu_Listener_801920ac
+  - Suggested namespace: FieldStatusMenu
+  - Role:
+    - Field-side listener for X-menu open/close flow.
+    - Opens the menu from RawControllers[DAT_80347154]->newPresses & 0x400.
+    - Loads /field/HrsBin_Status.mll.
+    - Calls FUN_801926b8 to initialize HRSBin status banks.
+    - Creates child callback FUN_80191ec8.
+  - Evidence:
+    - Docs\BinFileRecords.md, field/HrsBin_Status.mll Embedded Members.
+    - Research README under SpiceBin\research\2026-06-20_field_hrsbin_menu_controller.
+
+Status HRSBin bank loader
+  - Address: 801926b8
+  - Current label: FUN_801926b8
+  - Suggested label: FieldStatusMenu_LoadHrsBinBanks_801926b8
+  - Role:
+    - Initializes /field/HrsBin_Status.mll members 0..3 as HRSBin-style indexed objects.
+    - Loads member 4, ts0009.mld, as the companion texture/model bank through loadTextures_801db124.
+  - Member mapping:
+    - Member 0: StaCard.bin -> DAT_803470e8.
+    - Member 1: StaDeco.bin -> DAT_803470ec.
+    - Member 2: StaPaper.bin -> DAT_803470f0.
+    - Member 3: StaSprite00.bin -> DAT_803470f4.
+    - Member 4: ts0009.mld -> DAT_80347618.
+  - Evidence:
+    - Direct member initializer calls to FUN_801d6998.
+    - Direct texture load call for member 4 through loadTextures_801db124.
+
+Status HRSBin bank cleanup
+  - Address: 801925d8
+  - Current label: FUN_801925d8
+  - Suggested label: FieldStatusMenu_FreeHrsBinBanks_801925d8
+  - Role:
+    - Frees and clears the four status-bank globals.
+  - Evidence:
+    - Whole-program status-global xref scan found this function as lifecycle cleanup, not a record accessor.
+
+Status menu child callback
+  - Address: 80191ec8
+  - Current label: FUN_80191ec8
+  - Suggested label: FieldStatusMenu_ChildCallback_80191ec8
+  - Role:
+    - Child menu callback created by FieldStatusMenu_Listener_801920ac after the MLL banks are initialized.
+  - Evidence:
+    - Created from the X-menu listener path after /field/HrsBin_Status.mll load.
+
+Status menu state dispatcher
+  - Address: 80195f24
+  - Current label: FUN_80195f24
+  - Suggested label: FieldStatusMenu_DispatchState_80195f24
+  - Role:
+    - Dispatches active field status-menu state callbacks.
+  - Confidence: medium-high.
+
+Common status-menu frame renderer
+  - Address: 80195f9c
+  - Current label: FUN_80195f9c
+  - Suggested label: FieldStatusMenu_DrawCommonFrame_80195f9c
+  - Role:
+    - Draws common menu backing, decoration, selector accents, and shared overlay records.
+    - Uses StaCard 0x00, StaPaper 0x00, StaDeco 0x00..0x03, StaDeco 0x0e..0x11, and StaSprite00 0x0f.
+  - Note:
+    - StaCard 0x00, StaPaper 0x00, and StaSprite00 0x0f still have medium confidence as exact visible labels; the function role and record access are stable.
+
+
+3. Status-bank globals
+
+StaCard bank
+  - Address: 803470e8
+  - Current label: DAT_803470e8
+  - Suggested label: FieldStatusMenu_StaCardBank_803470e8
+  - Role: HRSBin-style indexed object for HrsBin_Status.mll member 0, StaCard.bin.
+
+StaDeco bank
+  - Address: 803470ec
+  - Current label: DAT_803470ec
+  - Suggested label: FieldStatusMenu_StaDecoBank_803470ec
+  - Role: HRSBin-style indexed object for HrsBin_Status.mll member 1, StaDeco.bin.
+
+StaPaper bank
+  - Address: 803470f0
+  - Current label: DAT_803470f0
+  - Suggested label: FieldStatusMenu_StaPaperBank_803470f0
+  - Role: HRSBin-style indexed object for HrsBin_Status.mll member 2, StaPaper.bin.
+
+StaSprite00 bank
+  - Address: 803470f4
+  - Current label: DAT_803470f4
+  - Suggested label: FieldStatusMenu_StaSpriteBank_803470f4
+  - Role: HRSBin-style indexed object for HrsBin_Status.mll member 3, StaSprite00.bin.
+
+Status companion texture bank
+  - Address: 80347618
+  - Current label: DAT_80347618
+  - Suggested label: FieldStatusMenu_Ts0009TextureBank_80347618
+  - Role: loaded texture/model bank from HrsBin_Status.mll member 4, ts0009.mld.
+
+Field status menu state
+  - Address: 80347110
+  - Current label: DAT_80347110
+  - Suggested label: FieldStatusMenu_State_80347110
+  - Role: active status-menu state/global state value.
+  - Confidence: medium-high.
+
+Active controller index
+  - Address: 80347154
+  - Current label: DAT_80347154
+  - Suggested label: FieldStatusMenu_ControllerIndex_80347154
+  - Role:
+    - Index into RawControllers for the field X-menu listener.
+    - Used by menu_listener at 801920ac before testing button mask 0x400.
+  - Confidence: medium-high. Keep wording scoped to this observed menu path unless wider field input analysis confirms a general role.
+
+
+4. Root selector and stat carousel
+
+Root stat carousel controller
+  - Address: 80183d90
+  - Current label: FUN_80183d90
+  - Suggested label: FieldStatusMenu_UpdateRootStatCarousel_80183d90
+  - Role:
+    - Handles left/right cycling for the five stat windows in the initial/root party selector.
+    - Controller code 7 increments the current slot field and wraps 5 -> 0.
+    - Controller code 6 decrements the current slot field and wraps -1 -> 4.
+  - Object fields:
+    - +0x44: current stat window slot, values 0..4.
+    - +0x48: previous stat window slot.
+    - +0x14: bottom next-page/back toggle field.
+  - Five window roles:
+    - 0: Attack, Defense, Will, Magic Defense.
+    - 1: Hit %, Dodge %, Quick.
+    - 2: weapon and armor equipment.
+    - 3: accessory equipment.
+    - 4: EXP and next EXP.
+  - Evidence:
+    - Root carousel route map and root stat carousel payload map in Docs\BinFileRecords.md.
+
+Root stat carousel child creator
+  - Address: 80199024
+  - Current label: FUN_80199024
+  - Suggested label: FieldStatusMenu_CreateRootStatCarouselChildren_80199024
+  - Role:
+    - Creates root stat carousel child objects for party members.
+    - Supports the five-window carousel for each party member entry.
+
+Root stat carousel payload installer
+  - Address: 8018c00c
+  - Current label: FUN_8018c00c
+  - Suggested label: FieldStatusMenu_InstallRootStatCarouselPayload_8018c00c
+  - Role:
+    - Installs the record payloads for the five root stat carousel windows.
+    - Uses stat label/icon records in StaSprite00 and companion markers.
+
+Root carousel value renderer
+  - Address: 8018d250
+  - Current label: FUN_8018d250
+  - Suggested label: FieldStatusMenu_DrawRootStatCarouselValues_8018d250
+  - Role:
+    - Draws the numeric/stat values for root carousel stat windows.
+  - Confidence: medium-high.
+
+
+5. Selector and page routing helpers
+
+Primary page dispatcher
+  - Address: 8016f6a4
+  - Current label: FUN_8016f6a4
+  - Suggested label: FieldStatusMenu_DispatchPrimaryPageSelection_8016f6a4
+  - Role:
+    - Maps primary selector slot 0 to item/inventory page state 7.
+    - Maps primary selector slot 1 to magic page state 5.
+    - Maps primary selector slot 2 to S-Move / Moonberries page state 10.
+    - Maps primary selector slot 3 to equipment page state 8.
+
+Primary page hub selector updater
+  - Address: 8016fd10
+  - Current label: FUN_8016fd10
+  - Suggested label: FieldStatusMenu_UpdatePrimaryPageHubSelector_8016fd10
+  - Role:
+    - Moves across party composition and visible page controls.
+    - Refreshes primary/secondary status detail objects.
+
+Layout-id menu entry constructor
+  - Address: 8016f21c
+  - Current label: FUN_8016f21c
+  - Suggested label: FieldStatusMenu_CreateLayoutIdMenuEntry_8016f21c
+  - Role:
+    - Builds selector/menu entries from layout ids.
+    - Drives the StaPaper records promoted as status menu-entry and options choice-entry keys in Docs\BinFileRecords.md.
+
+Layout-id selector object initializer
+  - Address: 8016f128
+  - Current label: FUN_8016f128
+  - Suggested label: FieldStatusMenu_InitLayoutIdSelectorObject_8016f128
+  - Role:
+    - Initializes selector objects used by the layout-id menu entry constructor.
+
+Root party selector builder
+  - Address: 801999b4
+  - Current label: FUN_801999b4
+  - Suggested label: FieldStatusMenu_CreateRootPartySelectorEntries_801999b4
+  - Role:
+    - Creates one root selector entry per available party member from party composition.
+    - Routes selected members into the primary page hub.
+
+Root ship equipment selector builder
+  - Address: 801998b8
+  - Current label: FUN_801998b8
+  - Suggested label: FieldStatusMenu_CreateRootShipEquipmentEntry_801998b8
+  - Role:
+    - Creates root-page ship equipment selector entry when the ship-equipment gate allows it.
+
+More menu selector builder
+  - Address: 80199678
+  - Current label: FUN_80199678
+  - Suggested label: FieldStatusMenu_CreateMoreMenuEntries_80199678
+  - Role:
+    - Creates entries for the second-page More menu.
+  - Confidence: medium-high.
+
+
+6. Page state identity
+
+Major state ids
+  - State 3: Party selector / page hub.
+  - State 5: Magic page.
+  - State 6: Item/magic use target or confirmation hub.
+  - State 7: Item/inventory page.
+  - State 8: Equipment page.
+  - State 10: S-Move / Moonberries page.
+  - State 11 and 12: Ship equipment slot chooser.
+  - State 13 and 14: Crew assignment page.
+  - State 15, 16, and 17: Options/settings toggle flow.
+  - State 18: Options/settings description and apply list.
+  - State 19: Wanted-list/poster viewer route.
+  - States 21..32: compact selector/control helper cases through FUN_80191a04.
+
+Crew assignment page
+  - Address: 801732c8
+  - Current label: FUN_801732c8
+  - Suggested label: FieldStatusMenu_CrewAssignmentPage_801732c8
+  - Role:
+    - Crew assignment page reached from More menu selector value 1.
+    - Works with 22 crew entries arranged as 11 two-person rows.
+
+Crew assignment apply/confirmation flow
+  - Address: 80171c80
+  - Current label: FUN_80171c80
+  - Suggested label: FieldStatusMenu_CrewAssignmentApplyFlow_80171c80
+  - Role:
+    - Draws pair-switch markers and applies rebuilt active crew list through FUN_80194f3c -> FUN_8021b2b4.
+
+Options description/apply list
+  - Address: 8017a040
+  - Current label: FUN_8017a040
+  - Suggested label: FieldStatusMenu_OptionsDescriptionApplyList_8017a040
+  - Role:
+    - Draws the options description/apply list using StaSprite00 0x49.
+    - Dispatches actions through PTR_FUN_802e9428.
+
+Wanted-list/poster viewer
+  - Address: 80185c00
+  - Current label: FUN_80185c00
+  - Suggested label: FieldStatusMenu_WantedPosterViewer_80185c00
+  - Role:
+    - Reached from More menu selector value 2 through FUN_801851c8.
+    - Dynamically formats and loads field/wanted_%02d{a,b}.mld with FUN_801db244.
+    - Registers the loaded MLD texture string list through FUN_80227810.
+    - Frees the loaded wanted MLD and unregisters its texture list on exit.
+    - Draws the HrsBin_Status wanted viewer panel/rule records through FUN_801863e8 and its callees.
+
+
+7. Status record accessor coverage
+
+Record accessor
+  - Address: 801d68c4
+  - Current label: FUN_801d68c4
+  - Suggested label: HrsBin_GetRecord_801d68c4
+  - Role:
+    - Returns a top-level HRSBin-style indexed record pointer from an initialized object and record index.
+  - Note:
+    - Name should be shared/general, not FieldStatusMenu-specific, because battle and field indexed UI layouts use the same object family.
+
+Coverage summary
+  - Whole-program xref scan of FUN_801d68c4 found 204 unique records reached from the four status banks.
+  - Resolved records:
+    - StaCard.bin: 12 of 13.
+    - StaDeco.bin: 18 of 18.
+    - StaPaper.bin: 101 of 113.
+    - StaSprite00.bin: 73 of 89.
+  - Every status-bank accessor call in the whole-program scan has a resolved record index.
+  - Remaining direct xrefs to the four status-bank globals are lifecycle init/free only.
+
+Unmapped serialized records
+  - Do not create editor-facing names in Ghidra for these without new evidence.
+  - StaCard.bin: 0x09.
+  - StaPaper.bin: 0x02, 0x03, 0x29, 0x47, 0x56, 0x57, 0x58, 0x59, 0x5a, 0x61, 0x6c, 0x6d.
+  - StaSprite00.bin: 0x03, 0x34, 0x39, 0x3d, 0x3e, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x48, 0x4b, 0x53, 0x54, 0x57.
+
+
+8. Suggested annotation pass order
+
+Pass 1: Namespaces
+  - Check existing Ghidra namespaces before applying.
+  - Suggested namespace: FieldStatusMenu.
+  - Suggested shared namespace for generic indexed-object helpers: HrsBin.
+
+Pass 2: Lifecycle functions and globals
+  - Annotate 801920ac, 801926b8, 801925d8, and 80191ec8 first.
+  - Annotate globals 803470e8, 803470ec, 803470f0, 803470f4, and 80347618.
+  - Add the loose field/HRSBin.bin negative-evidence note near the loader/string investigation if notes are supported.
+
+Pass 3: Root selector and carousel
+  - Annotate 80183d90, 80199024, 8018c00c, and 8018d250.
+  - Add object field comments for +0x44 current stat slot, +0x48 previous stat slot, and +0x14 bottom next-page/back toggle.
+
+Pass 4: Page routing
+  - Annotate 8016f6a4, 8016fd10, 8016f21c, 8016f128, 801999b4, 801998b8, and 80199678.
+  - Add state-id comments using the Page state identity section above.
+
+Pass 5: Record names
+  - Use Docs\BinFileRecords.md as the source of truth for per-record machine-facing keys.
+  - Do not promote the explicitly unmapped serialized records without runtime evidence, screenshot correlation, or new consumer evidence.

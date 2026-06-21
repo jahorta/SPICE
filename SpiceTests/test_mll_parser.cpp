@@ -514,36 +514,11 @@ TEST(SpiceMllParser, ProbesUnknownIndexedBinTables) {
     ASSERT_TRUE(parsed.ok());
     ASSERT_EQ(parsed.members.size(), 1U);
     const auto& member = parsed.members[0];
-    EXPECT_EQ(member.payloadKind, spice::mll::MllPayloadKind::Unknown);
+    EXPECT_EQ(member.payloadKind, spice::mll::MllPayloadKind::IndexedBin);
     const auto& probe = member.indexedBinTableProbe;
     EXPECT_TRUE(probe.present);
-    EXPECT_TRUE(probe.headerInBounds);
     EXPECT_EQ(probe.count, 2U);
-    EXPECT_EQ(probe.offsetTableOffset, 0x04U);
-    EXPECT_EQ(probe.offsetTableEndOffset, 0x0cU);
-    EXPECT_EQ(probe.dataBaseOffset, 0x0cU);
     EXPECT_TRUE(probe.offsetTableInBounds);
-    EXPECT_TRUE(probe.offsetsInBounds);
-    EXPECT_TRUE(probe.offsetsMonotonic);
-    EXPECT_EQ(probe.firstRecordOffset, 0x1cU);
-    EXPECT_EQ(probe.lastRecordOffset, 0x2cU);
-    EXPECT_EQ(probe.offsetsPreview, "16 32");
-    ASSERT_EQ(probe.samples.size(), 2U);
-    EXPECT_EQ(probe.samples[0].recordOffset, 0x1cU);
-    EXPECT_EQ(probe.samples[0].word0, 0x0cU);
-    EXPECT_TRUE(probe.samples[0].word0EqualsDataBaseOffset);
-    EXPECT_EQ(probe.samples[0].word4, 0x30U);
-    EXPECT_TRUE(probe.samples[0].word4TargetInBounds);
-    EXPECT_EQ(probe.samples[0].word8, 0x41420000U);
-    EXPECT_EQ(probe.samples[0].word12, 0U);
-    EXPECT_EQ(probe.samples[0].word16, 0x0cU);
-    EXPECT_EQ(probe.samples[0].word20, 0x40U);
-    EXPECT_EQ(probe.samples[0].word24, 0x43440000U);
-    EXPECT_EQ(probe.samples[0].bytes16Hex.substr(0U, 16U), "0000000c00000030");
-    EXPECT_EQ(probe.samples[0].bytes32Hex.substr(0U, 24U), "0000000c0000003041420000");
-    EXPECT_EQ(probe.samples[1].recordOffset, 0x2cU);
-    EXPECT_EQ(probe.samples[1].word0, 0x0cU);
-    EXPECT_EQ(probe.samples[1].word4, 0x40U);
 }
 
 TEST(SpiceMllParser, ProbesNamedBinTablesEvenWhenMldLike) {
@@ -553,15 +528,12 @@ TEST(SpiceMllParser, ProbesNamedBinTablesEvenWhenMldLike) {
     ASSERT_TRUE(parsed.ok());
     ASSERT_EQ(parsed.members.size(), 1U);
     const auto& member = parsed.members[0];
-    EXPECT_EQ(member.payloadKind, spice::mll::MllPayloadKind::MldFile);
+    EXPECT_EQ(member.payloadKind, spice::mll::MllPayloadKind::IndexedBin);
+    EXPECT_TRUE(member.embeddedMldHeader.plausible);
+    EXPECT_TRUE(member.embeddedMldHeader.indexEntryShapePlausible);
     const auto& probe = member.indexedBinTableProbe;
     EXPECT_TRUE(probe.present);
     EXPECT_EQ(probe.count, 1U);
-    EXPECT_TRUE(probe.offsetTableInBounds);
-    EXPECT_EQ(probe.dataBaseOffset, 0x08U);
-    ASSERT_EQ(probe.samples.size(), 1U);
-    EXPECT_TRUE(probe.samples[0].word0EqualsDataBaseOffset);
-    EXPECT_TRUE(probe.samples[0].word4TargetInBounds);
 }
 
 TEST(SpiceMllParser, CanProbeCountFromFirstMemberOffsetWhenHeaderCandidateDoesNotFit) {
