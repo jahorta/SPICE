@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace {
@@ -156,6 +157,65 @@ TEST(SpiceStdParser, ParsesEntryTableAndPreservesPayloadSpans)
     const auto exported = spice::stdfile::exportBytes(parsed, spice::stdfile::StdExportMode::DecodedBytes);
     ASSERT_TRUE(exported.ok());
     EXPECT_EQ(exported.bytes, bytes);
+}
+
+TEST(SpiceStdJsonExporter, EmitsActionRowsWithNamedFields)
+{
+    const auto bytes = makeActionRowsStd();
+    const auto parsed = spice::stdfile::parseBytes(bytes, "ma000.std");
+
+    ASSERT_TRUE(parsed.ok());
+    const std::string json = spice::stdfile::StdJsonExporter{}.toJson(parsed);
+
+    EXPECT_NE(json.find("\"schema\": \"spice_std_ir_v1\""), std::string::npos);
+    EXPECT_NE(json.find("\"source\": \"ma000.std\""), std::string::npos);
+    EXPECT_NE(json.find("\"layoutKind\": \"action_rows\""), std::string::npos);
+    EXPECT_NE(json.find("\"actionRows\": {"), std::string::npos);
+    EXPECT_NE(json.find("\"commandLow\": 0"), std::string::npos);
+    EXPECT_NE(json.find("\"commandHigh\": 1"), std::string::npos);
+    EXPECT_NE(json.find("\"combinedCommandKind\": 65536"), std::string::npos);
+    EXPECT_NE(json.find("\"loaderContextWordHex\": \"0x11223344\""), std::string::npos);
+    EXPECT_NE(json.find("\"rowTablePtrWordHex\": \"0x00000000\""), std::string::npos);
+    EXPECT_NE(json.find("\"actionId\": 4"), std::string::npos);
+    EXPECT_NE(json.find("\"rowType\": 1"), std::string::npos);
+    EXPECT_NE(json.find("\"callbackIndex\": 8"), std::string::npos);
+    EXPECT_NE(json.find("\"callbackOrdinal\": 3"), std::string::npos);
+    EXPECT_NE(json.find("\"flagsHex\": \"0x88000000\""), std::string::npos);
+    EXPECT_NE(json.find("\"secondaryKey\": -1"), std::string::npos);
+    EXPECT_NE(json.find("\"callbackAuxParam\": 14"), std::string::npos);
+    EXPECT_NE(json.find("\"transitionGateDivisorBits\": 1084227584"), std::string::npos);
+    EXPECT_NE(json.find("\"motionProgressStepHex\": \"0x3f800000\""), std::string::npos);
+    EXPECT_NE(json.find("\"entryTable\": null"), std::string::npos);
+}
+
+TEST(SpiceStdJsonExporter, EmitsEntryTableWithNamedFieldsAndPayloadBytes)
+{
+    const auto bytes = makeEntryTableStd();
+    const auto parsed = spice::stdfile::parseBytes(bytes, "ma0000.std");
+
+    ASSERT_TRUE(parsed.ok());
+    const std::string json = spice::stdfile::StdJsonExporter{}.toJson(parsed);
+
+    EXPECT_NE(json.find("\"schema\": \"spice_std_ir_v1\""), std::string::npos);
+    EXPECT_NE(json.find("\"layoutKind\": \"entry_table\""), std::string::npos);
+    EXPECT_NE(json.find("\"actionRows\": null"), std::string::npos);
+    EXPECT_NE(json.find("\"entryTable\": {"), std::string::npos);
+    EXPECT_NE(json.find("\"recordCountIncludingSentinel\": 3"), std::string::npos);
+    EXPECT_NE(json.find("\"kind\": 4"), std::string::npos);
+    EXPECT_NE(json.find("\"reserved0Hex\": \"0x00000000\""), std::string::npos);
+    EXPECT_NE(json.find("\"reserved1Hex\": \"0x00000000\""), std::string::npos);
+    EXPECT_NE(json.find("\"decodedSpanMinusHeader\": 64"), std::string::npos);
+    EXPECT_NE(json.find("\"entryCountWithoutSentinel\": 2"), std::string::npos);
+    EXPECT_NE(json.find("\"locationCode\": 4"), std::string::npos);
+    EXPECT_NE(json.find("\"opcode\": 3"), std::string::npos);
+    EXPECT_NE(json.find("\"combinedTypeHex\": \"0x00030004\""), std::string::npos);
+    EXPECT_NE(json.find("\"field2Hex\": \"0x12345678\""), std::string::npos);
+    EXPECT_NE(json.find("\"payloadSize\": 4"), std::string::npos);
+    EXPECT_NE(json.find("\"payloadOffsetOrPtr\": 48"), std::string::npos);
+    EXPECT_NE(json.find("\"payloadOffsetAbs\": 64"), std::string::npos);
+    EXPECT_NE(json.find("\"payloadBytesHex\": \"aabbccdd\""), std::string::npos);
+    EXPECT_NE(json.find("\"payloadBytesHex\": \"1011121314151617\""), std::string::npos);
+    EXPECT_NE(json.find("\"isSentinel\": true"), std::string::npos);
 }
 
 TEST(SpiceStdParser, PreservesOriginalAklzBytesAndCanReencode)
