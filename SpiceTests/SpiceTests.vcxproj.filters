@@ -25,17 +25,4 @@
     <ClCompile Include="test_sa3dport_stage5.cpp" />
     <ClCompile Include="test_spicecore.cpp" />
   </ItemGroup>
-  <ItemGroup>
-    <None Include="fixtures\mld\s044_sml_entry_0.mld">
-      <Filter>fixtures\mld</Filter>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <Filter Include="fixtures">
-      <UniqueIdentifier>{4ff842a1-f309-4ee6-931e-a7dd1db138c1}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="fixtures\mld">
-      <UniqueIdentifier>{d048ca1c-7d25-4b2e-83ea-4bf55239c226}</UniqueIdentifier>
-    </Filter>
-  </ItemGroup>
 </Project>

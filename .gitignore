@@ -22,6 +22,7 @@ soa_parser_reference_bundle/
 tools/ghidra/
 SpiceSCT/validations/
 AGENTS.md
+SpiceTests/fixtures/**/*.mld
 
 # Parser generated outputs
 SpiceFileParsing/blender_ir/

@@ -8,10 +8,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -85,38 +82,6 @@ void appendNameRecord(std::vector<std::uint8_t>& bytes, const std::string& name)
     std::copy_n(name.begin(), count, bytes.begin() + static_cast<std::ptrdiff_t>(offset));
 }
 
-std::filesystem::path findFixturePath(const std::filesystem::path& relativePath) {
-    auto current = std::filesystem::current_path();
-    while (true) {
-        const auto fromRepoRoot = current / "SpiceTests" / relativePath;
-        if (std::filesystem::exists(fromRepoRoot)) {
-            return fromRepoRoot;
-        }
-
-        const auto fromTestsRoot = current / relativePath;
-        if (std::filesystem::exists(fromTestsRoot)) {
-            return fromTestsRoot;
-        }
-
-        const auto parent = current.parent_path();
-        if (parent == current || parent.empty()) {
-            break;
-        }
-        current = parent;
-    }
-    throw std::runtime_error("Could not locate test fixture: " + relativePath.string());
-}
-
-std::vector<std::uint8_t> readBinaryFile(const std::filesystem::path& path) {
-    std::ifstream in(path, std::ios::binary);
-    if (!in) {
-        throw std::runtime_error("Could not open binary fixture: " + path.string());
-    }
-    return std::vector<std::uint8_t>(
-        std::istreambuf_iterator<char>(in),
-        std::istreambuf_iterator<char>());
-}
-
 void writeList(std::vector<std::uint8_t>& bytes, std::size_t offset, std::span<const std::uint32_t> values, Endian endian) {
     writeU32(bytes, offset, static_cast<std::uint32_t>(values.size()), endian);
     for (std::size_t i = 0; i < values.size(); ++i) {
@@ -176,6 +141,82 @@ std::vector<std::uint8_t> makeMinimalMld(Endian endian) {
     writeU16(bytes, kGrndOffset + 0x2AU, 0U, endian);
 
     writeU32(bytes, kTextureTable, 0U, endian);
+    return bytes;
+}
+
+void writeSa3dPointer(std::vector<std::uint8_t>& bytes,
+    std::size_t offset,
+    std::uint32_t modelBlockRelativeOffset) {
+    writeU32(bytes, offset, modelBlockRelativeOffset - 0x08U, Endian::Little);
+}
+
+std::vector<std::uint8_t> makeWrappedObjectMldWithTriangleGeometry() {
+    constexpr std::uint32_t kObjectWrapperOffset = 0x180U;
+    constexpr std::uint32_t kModelRelativeOffset = 0x40U;
+    constexpr std::uint32_t kModelBlockOffset = kObjectWrapperOffset + kModelRelativeOffset;
+    constexpr std::uint32_t kNodeRelativeOffset = 0x08U;
+    constexpr std::uint32_t kAttachRelativeOffset = 0x48U;
+    constexpr std::uint32_t kVertexChunkRelativeOffset = 0x78U;
+    constexpr std::uint32_t kPolyChunkRelativeOffset = 0xC8U;
+    constexpr std::uint32_t kNodeOffset = kModelBlockOffset + kNodeRelativeOffset;
+    constexpr std::uint32_t kAttachOffset = kModelBlockOffset + kAttachRelativeOffset;
+    constexpr std::uint32_t kVertexChunkOffset = kModelBlockOffset + kVertexChunkRelativeOffset;
+    constexpr std::uint32_t kPolyChunkOffset = kModelBlockOffset + kPolyChunkRelativeOffset;
+
+    auto bytes = makeMinimalMld(Endian::Big);
+    bytes.resize(0x300U, 0U);
+
+    const std::uint32_t objects[] = { kObjectWrapperOffset };
+    writeList(bytes, kListObjects, objects, Endian::Big);
+
+    writeU32(bytes, kObjectWrapperOffset, kModelRelativeOffset, Endian::Big);
+    writeTag(bytes, kModelBlockOffset, "NJCM");
+    writeU32(bytes, kModelBlockOffset + 0x04U, 0xF0U, Endian::Little);
+
+    writeU32(bytes, kNodeOffset + 0x00U, 0U, Endian::Little);
+    writeSa3dPointer(bytes, kNodeOffset + 0x04U, kAttachRelativeOffset);
+    writeF32(bytes, kNodeOffset + 0x08U, 1.0F, Endian::Little);
+    writeF32(bytes, kNodeOffset + 0x0CU, 2.0F, Endian::Little);
+    writeF32(bytes, kNodeOffset + 0x10U, 3.0F, Endian::Little);
+    writeU32(bytes, kNodeOffset + 0x14U, 0U, Endian::Little);
+    writeU32(bytes, kNodeOffset + 0x18U, 0U, Endian::Little);
+    writeU32(bytes, kNodeOffset + 0x1CU, 0U, Endian::Little);
+    writeF32(bytes, kNodeOffset + 0x20U, 1.0F, Endian::Little);
+    writeF32(bytes, kNodeOffset + 0x24U, 1.0F, Endian::Little);
+    writeF32(bytes, kNodeOffset + 0x28U, 1.0F, Endian::Little);
+    writeU32(bytes, kNodeOffset + 0x2CU, 0U, Endian::Little);
+    writeU32(bytes, kNodeOffset + 0x30U, 0U, Endian::Little);
+
+    writeSa3dPointer(bytes, kAttachOffset + 0x00U, kVertexChunkRelativeOffset);
+    writeSa3dPointer(bytes, kAttachOffset + 0x04U, kPolyChunkRelativeOffset);
+    writeF32(bytes, kAttachOffset + 0x08U, 0.0F, Endian::Little);
+    writeF32(bytes, kAttachOffset + 0x0CU, 0.0F, Endian::Little);
+    writeF32(bytes, kAttachOffset + 0x10U, 0.0F, Endian::Little);
+    writeF32(bytes, kAttachOffset + 0x14U, 8.0F, Endian::Little);
+
+    writeU32(bytes, kVertexChunkOffset + 0x00U, 0x00000022U, Endian::Little);
+    writeU32(bytes, kVertexChunkOffset + 0x04U, 0x00030000U, Endian::Little);
+    writeF32(bytes, kVertexChunkOffset + 0x08U, 0.0F, Endian::Little);
+    writeF32(bytes, kVertexChunkOffset + 0x0CU, 0.0F, Endian::Little);
+    writeF32(bytes, kVertexChunkOffset + 0x10U, 0.0F, Endian::Little);
+    writeF32(bytes, kVertexChunkOffset + 0x14U, 1.0F, Endian::Little);
+    writeF32(bytes, kVertexChunkOffset + 0x18U, 0.0F, Endian::Little);
+    writeF32(bytes, kVertexChunkOffset + 0x1CU, 0.0F, Endian::Little);
+    writeF32(bytes, kVertexChunkOffset + 0x20U, 0.0F, Endian::Little);
+    writeF32(bytes, kVertexChunkOffset + 0x24U, 1.0F, Endian::Little);
+    writeF32(bytes, kVertexChunkOffset + 0x28U, 0.0F, Endian::Little);
+    writeU32(bytes, kVertexChunkOffset + 0x2CU, 0x000000FFU, Endian::Little);
+    writeU32(bytes, kVertexChunkOffset + 0x30U, 0U, Endian::Little);
+
+    writeU16(bytes, kPolyChunkOffset + 0x00U, 0x0040U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x02U, 5U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x04U, 1U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x06U, 3U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x08U, 0U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x0AU, 1U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x0CU, 2U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x0EU, 0x00FFU, Endian::Little);
+
     return bytes;
 }
 
@@ -315,25 +356,24 @@ TEST(MldParser, ResolvesWrappedObjectModelOffsetBeforeFallbackScan) {
     EXPECT_EQ(found->wrapperLayout, "mld-object-wrapper");
 }
 
-TEST(MldParser, ParsesWrappedS044SmlEntryObjectIntoBlenderIrGeometry) {
-    const auto fixturePath = findFixturePath("fixtures/mld/s044_sml_entry_0.mld");
-    const auto bytes = readBinaryFile(fixturePath);
+TEST(MldParser, ParsesSyntheticWrappedMldObjectIntoBlenderIrGeometry) {
+    const auto bytes = makeWrappedObjectMldWithTriangleGeometry();
 
     MldParser parser;
     const auto parsed = parser.parse(bytes);
 
     ASSERT_EQ(parsed.entryList.size(), 1U);
     ASSERT_EQ(parsed.entryList[0].objectAddresses.size(), 1U);
-    EXPECT_EQ(parsed.entryList[0].objectAddresses[0], 0xC0U);
+    EXPECT_EQ(parsed.entryList[0].objectAddresses[0], 0x180U);
 
     const auto found = std::find_if(parsed.extractedNjBlocks.begin(), parsed.extractedNjBlocks.end(), [](const auto& block) {
-        return block.sourceObjectAddress == 0xC0U;
+        return block.sourceObjectAddress == 0x180U;
     });
     ASSERT_NE(found, parsed.extractedNjBlocks.end());
     ASSERT_TRUE(found->modelBlockOffset.has_value());
     ASSERT_TRUE(found->modelReadOffset.has_value());
-    EXPECT_EQ(*found->modelBlockOffset, 0x1F0U);
-    EXPECT_EQ(*found->modelReadOffset, 0x130U);
+    EXPECT_EQ(*found->modelBlockOffset, 0x1C0U);
+    EXPECT_EQ(*found->modelReadOffset, 0x40U);
     EXPECT_EQ(found->wrapperLayout, "mld-object-wrapper");
 
     ASSERT_TRUE(parsed.blenderIrScene.has_value());
