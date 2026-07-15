@@ -188,10 +188,18 @@ Current next work:
 
 ### `.std`
 
-`SpiceStd` exists as the initial `.std` usage inventory surface. It scans real
-`.std` files without claiming a full schema, records AKLZ status, decoded size,
-header fingerprints, directory/name buckets, and the ALX-covered
-`bchara/M*.std` family.
+`SpiceStd` now has a conservative parser/re-exporter and JSON export surface for
+the two observed battle `.std` layout forms:
+
+- `%s_STD`: combatant action-row tables with a 0x10-byte header and fixed
+  0x18-byte rows.
+- `%s0_STD`: entry tables with a 0x10-byte header, 0x10-byte records, and
+  payload bodies addressed relative to decoded `+0x10`.
+
+The parser handles AKLZ-wrapped inputs, preserves decoded bytes, exports
+decoded or AKLZ-compressed bytes, and emits `spice_std_ir_v1` JSON through
+`SpiceFileParsing --export-std-json`. The current contract intentionally keeps
+opaque payload bytes intact unless a type-specific editor owns them.
 
 The initial EU baseline scan produced:
 
@@ -205,17 +213,24 @@ The initial EU baseline scan produced:
 
 Current next work:
 
-- Use the output to decide which `.std` subgroup deserves the first parser.
-- Add finer prefix grouping for the broad `bchara_m_family` bucket if the
-  follow-up investigation needs MA/MB/etc. counts.
-- Correlate `bchara_character_resource` and the six `other_directory` files
-  against runtime loaders.
+- Promote high-value `%s0_STD` payload types only when static/runtime evidence
+  identifies stable field ownership. `0x0003002a` action-view records are the
+  first priority because they gate serialized versus synthetic camera/action-view
+  behavior.
+- Keep semantic editing boundaries strict: `%s_STD` action rows choose action
+  callbacks and row-local parameters, while `%s0_STD` payloads own action-view,
+  camera, sound/effect, and related visual record bodies.
+- Re-run broader US/EU/JP corpus checks after each promoted payload layout
+  before allowing round-trip edits beyond preserve/re-export.
+- Correlate `bchara_character_resource`, `common.std`, `damage.std`, and the
+  six non-`bchara` files against runtime loaders before treating them as the
+  same authoring surface as battle combatant STD files.
 
 ## Remaining First-Look Families
 
 ### Audio: `.dsp`, `.info`, `.samp`
 
-The sound formats are the largest untouched family after `.std`.
+The sound formats are now the largest remaining untouched family.
 
 Initial SPICE milestone:
 
@@ -265,16 +280,16 @@ Initial SPICE milestone:
 
 ## Updated Roadmap
 
-### Phase 1: `.std` Usage Inventory
+### Phase 1: `.std` Conservative Parser and Semantic Promotion
 
-Use `SpiceStd` to drive the conservative usage inventory for real `.std` files.
-The first output should help answer:
+`SpiceStd` covers the initial battle STD parser/re-exporter and JSON export
+milestone. Continue with tightly scoped semantic promotion:
 
-- Which name/path groups exist?
-- Which are ALX-covered `bchara/m*.std` files?
-- Which groups are AKLZ-wrapped?
-- Which decoded header clusters repeat?
-- Which groups should be parser targets?
+- action-view payload layout and gate behavior for `0x0003002a`;
+- camera payload layout for `0x00030058`;
+- sound/effect request payload layout for `0x00030036`;
+- callback-family ownership for `%s_STD` row fields that are still
+  preserve/expert.
 
 ### Phase 2: Audio Family Probe
 
@@ -297,7 +312,7 @@ audio surfaces are in better shape.
 | `.dsp` | `vgmstream/vgmstream` | vgmstream supports Nintendo/GameCube DSP ADPCM variants and includes reusable header validation and decode logic. |
 | `.info` / `.samp` | `vgmstream/vgmstream` plus TXTH support | No direct Skies handler is known, but vgmstream has broad companion-file audio support. |
 | `.tpl` | `soopercool101/BrawlCrate` | BrawlLib has TPL parsing/rebuilding and GameCube/Wii texture conversion code. |
-| `.std` | ALX plus local Ghidra/runtime evidence | ALX's selected `bchara/m*.std` handling is the best starting reference, but broader `.std` usage needs local evidence. |
+| `.std` | ALX plus local Ghidra/runtime evidence | ALX remains useful for naming and corpus cross-reference, but the parser/editor contract now comes from local Ghidra traces, SpiceStd corpus scans, and SAVOR runtime cross-checks. |
 
 Candidate URLs:
 
@@ -306,9 +321,11 @@ Candidate URLs:
 
 ## Open Questions
 
-- Which `.std` filename groups are actually consumed by distinct runtime
-  handlers?
-- Are non-`m*.std` files animation data, character metadata, effect linkage, or
+- Which promoted `%s0_STD` payload layouts are stable enough for semantic
+  editing rather than preserve-only JSON?
+- Which `.std` filename groups are consumed by distinct runtime handlers outside
+  battle combatant resources?
+- Are non-`M*.std` files animation data, character metadata, effect linkage, or
   separate table formats?
 - Are `.info` and `.samp` enough to reconstruct playable audio, or do they
   require separate lookup tables?
