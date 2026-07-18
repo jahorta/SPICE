@@ -21,6 +21,7 @@ namespace {
 using spice::core::Endian;
 using spice::mld::exporting::MldExportOptions;
 using spice::mld::exporting::MldFileExporter;
+using spice::mld::exporting::MldFileWriter;
 using spice::mld::model::TargetPlatform;
 using spice::mld::parsing::MldParser;
 
@@ -722,6 +723,50 @@ TEST(MldTextureArchiveRebuild, ReplacesWithLargerTextureAndPreservesNames) {
     EXPECT_EQ(reparsed.textureArchive->entries[1].gvrDataSize, second.size());
     EXPECT_EQ(reparsed.textureArchive->entries[0].sourceFormat, "RGBA8");
     EXPECT_EQ(reparsed.textureArchive->archivePrefixBytes, parsed.textureArchive->archivePrefixBytes);
+}
+
+TEST(MldCanonicalTextureWriter, RebuildsEditedTextureArchiveFromCanonicalFile) {
+    const auto small = encodeTexture(makeImage(8U, 8U, 3U), spice::gvm::model::TextureFormat::I4);
+    const auto second = encodeTexture(makeImage(8U, 8U, 7U), spice::gvm::model::TextureFormat::RGB565);
+    const auto replacement = encodeTexture(makeImage(8U, 8U, 11U), spice::gvm::model::TextureFormat::RGBA8);
+    ASSERT_GT(replacement.size(), small.size());
+
+    auto file = MldParser{}.parseBytes(makeTexturedMld(small, second));
+    ASSERT_TRUE(file.textureArchive.has_value());
+    ASSERT_EQ(file.textureArchive->entries.size(), 2U);
+    file.textureArchive->entries[0].gvrData = replacement;
+
+    const auto written = MldFileWriter{}.write(file);
+    ASSERT_TRUE(written.ok());
+    const auto reparsed = MldParser{}.parseBytes(written.bytes);
+    ASSERT_TRUE(reparsed.textureArchive.has_value());
+    ASSERT_EQ(reparsed.textureArchive->entries.size(), 2U);
+    EXPECT_EQ(reparsed.textureArchive->entries[0].textureName, "tex_a");
+    EXPECT_EQ(reparsed.textureArchive->entries[0].gvrData, replacement);
+    EXPECT_EQ(reparsed.textureArchive->entries[1].textureName, "tex_b");
+    EXPECT_EQ(reparsed.textureArchive->entries[1].gvrData, second);
+}
+
+TEST(MldCanonicalTextureWriter, RebuildsNameTableWhenAddingTextureEntry) {
+    const auto first = encodeTexture(makeImage(8U, 8U, 3U), spice::gvm::model::TextureFormat::I4);
+    const auto second = encodeTexture(makeImage(8U, 8U, 7U), spice::gvm::model::TextureFormat::RGB565);
+    const auto added = encodeTexture(makeImage(8U, 8U, 13U), spice::gvm::model::TextureFormat::RGB5A3);
+
+    auto file = MldParser{}.parseBytes(makeTexturedMld(first, second));
+    ASSERT_TRUE(file.textureArchive.has_value());
+    auto addedEntry = file.textureArchive->entries.front();
+    addedEntry.archiveTextureIndex = 2U;
+    addedEntry.textureName = "tex_c";
+    addedEntry.gvrData = added;
+    file.textureArchive->entries.push_back(std::move(addedEntry));
+
+    const auto written = MldFileWriter{}.write(file);
+    ASSERT_TRUE(written.ok());
+    const auto reparsed = MldParser{}.parseBytes(written.bytes);
+    ASSERT_TRUE(reparsed.textureArchive.has_value());
+    ASSERT_EQ(reparsed.textureArchive->entries.size(), 3U);
+    EXPECT_EQ(reparsed.textureArchive->entries[2].textureName, "tex_c");
+    EXPECT_EQ(reparsed.textureArchive->entries[2].gvrData, added);
 }
 
 TEST(MldTextureArchiveRebuild, PreservesExactTextureGvrPayloadsForExtraction) {
