@@ -25,4 +25,8 @@
     <ClCompile Include="test_sa3dport_stage5.cpp" />
     <ClCompile Include="test_spicecore.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="test_spice_blender_lookup_image_runtime.py" />
+    <None Include="test_spice_blender_ir_importer.py" />
+  </ItemGroup>
 </Project>

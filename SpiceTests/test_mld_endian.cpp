@@ -1,4 +1,6 @@
 #include "../SpiceMLD/SpiceMLD.h"
+#include "../SpiceMLD/Parsing/GobjParser.h"
+#include "../SpiceMLD/Parsing/GrndParser.h"
 #include "../SpiceGvm/SpiceGvm.h"
 #include "../Compression/Aklz.h"
 
@@ -67,6 +69,106 @@ void writeTag(std::vector<std::uint8_t>& bytes, std::size_t offset, const char* 
     bytes[offset + 1U] = static_cast<std::uint8_t>(tag[1]);
     bytes[offset + 2U] = static_cast<std::uint8_t>(tag[2]);
     bytes[offset + 3U] = static_cast<std::uint8_t>(tag[3]);
+}
+
+std::vector<std::uint8_t> makeSyntheticGobj(
+    const std::uint8_t chunkType,
+    const std::uint8_t recordWords,
+    const bool hasNormal,
+    const bool hasUserAttributes) {
+    constexpr std::size_t nodeOffset = 0x10U;
+    constexpr std::size_t attachOffset = 0x50U;
+    constexpr std::size_t payloadOffset = attachOffset + 0x10U;
+    constexpr std::size_t polyOffset = payloadOffset + 76U;
+    constexpr std::size_t vertexOffset = 0xBCU;
+    constexpr std::size_t vertexCount = 3U;
+    const std::size_t declaredSize = vertexOffset + 8U + (vertexCount * recordWords * 4U);
+
+    std::vector<std::uint8_t> bytes(declaredSize, 0U);
+    writeTag(bytes, 0U, "GOBJ");
+    writeU32(bytes, 4U, static_cast<std::uint32_t>(declaredSize), Endian::Big);
+    writeU32(bytes, nodeOffset, static_cast<std::uint32_t>(attachOffset - nodeOffset), Endian::Big);
+    writeF32(bytes, nodeOffset + 0x20U, 1.0F, Endian::Big);
+    writeF32(bytes, nodeOffset + 0x24U, 1.0F, Endian::Big);
+    writeF32(bytes, nodeOffset + 0x28U, 1.0F, Endian::Big);
+
+    writeU32(bytes, payloadOffset, static_cast<std::uint32_t>(vertexOffset - payloadOffset), Endian::Big);
+    constexpr std::array<std::uint16_t, 3> flags{ 0x0001U, 0x0002U, 0x8003U };
+    for (std::size_t i = 0; i < vertexCount; ++i) {
+        writeU16(bytes, polyOffset + (i * 4U), static_cast<std::uint16_t>(2U + (i * recordWords)), Endian::Big);
+        writeU16(bytes, polyOffset + (i * 4U) + 2U, flags[i], Endian::Big);
+    }
+    writeU16(bytes, polyOffset + 12U, 0xFFFFU, Endian::Big);
+    writeU16(bytes, polyOffset + 14U, 0xFFFFU, Endian::Big);
+
+    writeU32(bytes, vertexOffset, chunkType, Endian::Big);
+    writeU32(bytes, vertexOffset + 4U, static_cast<std::uint32_t>(vertexCount << 16U), Endian::Big);
+    constexpr std::array<std::uint32_t, 3> userAttributes{ 0xFFFFFFFFU, 0x12345678U, 0x00000000U };
+    for (std::size_t i = 0; i < vertexCount; ++i) {
+        const std::size_t recordOffset = vertexOffset + 8U + (i * recordWords * 4U);
+        writeF32(bytes, recordOffset + 0U, static_cast<float>(i), Endian::Big);
+        writeF32(bytes, recordOffset + 4U, static_cast<float>(i + 1U), Endian::Big);
+        writeF32(bytes, recordOffset + 8U, static_cast<float>(i + 2U), Endian::Big);
+        if (hasNormal) {
+            writeF32(bytes, recordOffset + 12U, 0.0F, Endian::Big);
+            writeF32(bytes, recordOffset + 16U, 1.0F, Endian::Big);
+            writeF32(bytes, recordOffset + 20U, 0.0F, Endian::Big);
+        }
+        if (hasUserAttributes) {
+            writeU32(bytes, recordOffset + 24U, userAttributes[i], Endian::Big);
+        }
+    }
+    return bytes;
+}
+
+std::vector<std::uint8_t> makeSyntheticGrnd() {
+    constexpr std::size_t innerHeader = 0x10U;
+    constexpr std::size_t triangleSetsOffset = 0x40U;
+    constexpr std::size_t streamOffset = 0x60U;
+    constexpr std::size_t vertexOffset = 0x80U;
+    constexpr std::size_t quadRegistryOffset = 0xC8U;
+    constexpr std::size_t quadTableOffset = quadRegistryOffset + 4U;
+    constexpr std::size_t refListOffset = 0xDCU;
+    constexpr std::size_t declaredSize = 0xE0U;
+
+    std::vector<std::uint8_t> bytes(declaredSize, 0U);
+    writeTag(bytes, 0U, "GRND");
+    writeU32(bytes, 4U, static_cast<std::uint32_t>(declaredSize), Endian::Big);
+    writeU32(bytes, innerHeader, static_cast<std::uint32_t>(triangleSetsOffset - innerHeader), Endian::Big);
+    writeU32(bytes, innerHeader + 4U, static_cast<std::uint32_t>(quadRegistryOffset - innerHeader), Endian::Big);
+    writeU16(bytes, innerHeader + 0x10U, 1U, Endian::Big);
+    writeU16(bytes, innerHeader + 0x12U, 1U, Endian::Big);
+    writeU16(bytes, innerHeader + 0x14U, 1U, Endian::Big);
+    writeU16(bytes, innerHeader + 0x16U, 1U, Endian::Big);
+    writeU16(bytes, innerHeader + 0x18U, 1U, Endian::Big);
+    writeU16(bytes, innerHeader + 0x1AU, 1U, Endian::Big);
+
+    writeU32(bytes, triangleSetsOffset + 0x0CU,
+        static_cast<std::uint32_t>(vertexOffset - (triangleSetsOffset + 0x0CU)), Endian::Big);
+    writeU32(bytes, triangleSetsOffset + 0x10U,
+        static_cast<std::uint32_t>(streamOffset - (triangleSetsOffset + 0x10U)), Endian::Big);
+    writeU32(bytes, triangleSetsOffset + 0x14U, 1U, Endian::Big);
+
+    constexpr std::array<std::uint16_t, 3> floatIndices{ 0U, 6U, 12U };
+    constexpr std::array<std::uint16_t, 3> flags{ 0x0001U, 0x7FFFU, 0x800AU };
+    for (std::size_t i = 0; i < 3U; ++i) {
+        writeU16(bytes, streamOffset + (i * 4U), floatIndices[i], Endian::Big);
+        writeU16(bytes, streamOffset + (i * 4U) + 2U, flags[i], Endian::Big);
+        const std::size_t recordOffset = vertexOffset + (i * 24U);
+        writeF32(bytes, recordOffset + 0U, static_cast<float>(i), Endian::Big);
+        writeF32(bytes, recordOffset + 4U, static_cast<float>(i == 1U), Endian::Big);
+        writeF32(bytes, recordOffset + 8U, static_cast<float>(i == 2U), Endian::Big);
+        writeF32(bytes, recordOffset + 12U, 0.0F, Endian::Big);
+        writeF32(bytes, recordOffset + 16U, 1.0F, Endian::Big);
+        writeF32(bytes, recordOffset + 20U, 0.0F, Endian::Big);
+    }
+
+    writeU32(bytes, quadTableOffset, 1U, Endian::Big);
+    writeU32(bytes, quadTableOffset + 4U,
+        static_cast<std::uint32_t>(refListOffset - (quadTableOffset + 4U)), Endian::Big);
+    writeU16(bytes, refListOffset, 0U, Endian::Big);
+    writeU16(bytes, refListOffset + 2U, 0U, Endian::Big);
+    return bytes;
 }
 
 void appendU32(std::vector<std::uint8_t>& bytes, std::uint32_t value, Endian endian) {
@@ -433,6 +535,34 @@ TEST(BlenderIrJsonExporter, EmitsTblIdAsSignedDecimalNumber) {
     EXPECT_EQ(json.find("\"tblId\":0x"), std::string::npos);
 }
 
+TEST(BlenderIrJsonExporter, EmitsFunctionParametersAsUnsignedDecimalNumbers) {
+    spice::mld::model::BlenderIrScene scene{};
+    spice::mld::model::BlenderIrInstance instance{};
+    instance.functionParameters = {0U, 0xFFFFFFFFU, 0x12345678U};
+    scene.indexEntries.push_back(std::move(instance));
+
+    const auto json = spice::mld::exporting::BlenderIrJsonExporter{}.toJson(scene);
+    EXPECT_NE(
+        json.find("\"functionParameters\":[0,4294967295,305419896]"),
+        std::string::npos);
+    EXPECT_EQ(json.find("\"functionParameters\":[0x"), std::string::npos);
+    EXPECT_EQ(json.find("\"functionParameters\":[-1"), std::string::npos);
+}
+
+TEST(Sa3dBlenderIrBuilder, PreservesParsedFunctionParameters) {
+    spice::mld::parsing::ParseResult parsed{};
+    spice::mld::parsing::ParsedRawEntry entry{};
+    entry.sourceEntryId = 9U;
+    entry.functionParameters = {0U, 0xFFFFFFFFU, 0x12345678U};
+    parsed.rawEntries.push_back(std::move(entry));
+
+    const auto scene = spice::mld::parsing::Sa3dBlenderIrBuilder{}.build(parsed);
+    ASSERT_EQ(scene.indexEntries.size(), 1U);
+    EXPECT_EQ(
+        scene.indexEntries[0].functionParameters,
+        (std::vector<std::uint32_t>{0U, 0xFFFFFFFFU, 0x12345678U}));
+}
+
 TEST(BlenderIrJsonExporter, EmitsValueBearingAnimationChannels) {
     spice::mld::model::BlenderIrScene scene{};
     spice::mld::model::BlenderIrAnimation animation{};
@@ -721,4 +851,85 @@ TEST(MldTextureArchiveRebuild, PreservesAklzWrappingByDefaultWhenCompressed) {
     const auto reparsed = parser.parseFile(decoded.bytes);
     ASSERT_TRUE(reparsed.textureArchive.has_value());
     EXPECT_EQ(reparsed.textureArchive->entries[0].gvrDataSize, replacement.size());
+}
+
+TEST(GobjParser, DecodesPositionOnlyVertexChunk22) {
+    const auto bytes = makeSyntheticGobj(0x22U, 3U, false, false);
+    const auto decoded = spice::mld::parsing::GobjParser{}.decode(bytes, 0x1000U, Endian::Big);
+
+    ASSERT_TRUE(decoded.decoded);
+    ASSERT_EQ(decoded.nodes.size(), 1U);
+    const auto& mesh = decoded.nodes[0].streamMesh;
+    ASSERT_EQ(mesh.vertices.size(), 3U);
+    ASSERT_EQ(mesh.indices.size(), 3U);
+    ASSERT_EQ(mesh.triangleMetadata.size(), 1U);
+    EXPECT_FALSE(mesh.vertices[0].hasNormal);
+    EXPECT_FALSE(mesh.vertices[0].rawUserAttributesU32.has_value());
+    EXPECT_FLOAT_EQ(mesh.vertices[0].position.x, 2.0F);
+    EXPECT_EQ(mesh.triangleMetadata[0].rawU16, (std::array<std::uint16_t, 3>{ 1U, 2U, 0x8003U }));
+}
+
+TEST(GobjParser, PreservesExistingNormalVertexChunk29) {
+    const auto bytes = makeSyntheticGobj(0x29U, 6U, true, false);
+    const auto decoded = spice::mld::parsing::GobjParser{}.decode(bytes, 0x2000U, Endian::Big);
+
+    ASSERT_TRUE(decoded.decoded);
+    ASSERT_EQ(decoded.nodes.size(), 1U);
+    const auto& mesh = decoded.nodes[0].streamMesh;
+    ASSERT_EQ(mesh.vertices.size(), 3U);
+    EXPECT_TRUE(mesh.vertices[0].hasNormal);
+    EXPECT_FLOAT_EQ(mesh.vertices[0].normal.y, 1.0F);
+    EXPECT_FALSE(mesh.vertices[0].rawUserAttributesU32.has_value());
+}
+
+TEST(GobjParser, DecodesChunk2bAndPreservesRawUserAttributes) {
+    const auto bytes = makeSyntheticGobj(0x2BU, 7U, true, true);
+    const auto decoded = spice::mld::parsing::GobjParser{}.decode(bytes, 0x3000U, Endian::Big);
+
+    ASSERT_TRUE(decoded.decoded);
+    ASSERT_EQ(decoded.nodes.size(), 1U);
+    const auto& mesh = decoded.nodes[0].streamMesh;
+    ASSERT_EQ(mesh.vertices.size(), 3U);
+    ASSERT_TRUE(mesh.vertices[0].rawUserAttributesU32.has_value());
+    ASSERT_TRUE(mesh.vertices[1].rawUserAttributesU32.has_value());
+    ASSERT_TRUE(mesh.vertices[2].rawUserAttributesU32.has_value());
+    EXPECT_EQ(*mesh.vertices[0].rawUserAttributesU32, 0U);
+    EXPECT_EQ(*mesh.vertices[1].rawUserAttributesU32, 0x12345678U);
+    EXPECT_EQ(*mesh.vertices[2].rawUserAttributesU32, 0xFFFFFFFFU);
+}
+
+TEST(GrndParser, PreservesRawTriangleMetadataAcrossWindingReversal) {
+    const auto bytes = makeSyntheticGrnd();
+    const auto decoded = spice::mld::parsing::GrndParser{}.decode(bytes, 0x4000U, Endian::Big);
+
+    ASSERT_TRUE(decoded.decoded);
+    ASSERT_EQ(decoded.mesh.indices.size(), 3U);
+    EXPECT_EQ(decoded.mesh.indices[0], 2U);
+    EXPECT_EQ(decoded.mesh.indices[1], 1U);
+    EXPECT_EQ(decoded.mesh.indices[2], 0U);
+    ASSERT_EQ(decoded.mesh.triangleMetadata.size(), 1U);
+    EXPECT_EQ(decoded.mesh.triangleMetadata[0].rawU16,
+        (std::array<std::uint16_t, 3>{ 0x0001U, 0x7FFFU, 0x800AU }));
+}
+
+TEST(BlenderIrJsonExporter, EmitsRawTriangleMetadataAndVertexUserAttributesWithoutSemantics) {
+    spice::mld::model::BlenderIrScene scene{};
+    spice::mld::model::BlenderIrMesh mesh{};
+    spice::mld::model::BlenderIrVertex vertex{};
+    vertex.rawUserAttributesU32 = 0xFFFFFFFFU;
+    mesh.vertices.push_back(vertex);
+
+    spice::mld::model::BlenderIrTriangleSet triangleSet{};
+    triangleSet.triangleMetadata.push_back(spice::mld::model::TriangleMetadata{
+        .rawU16 = { 0U, 0xFFFFU, 0x8000U },
+    });
+    mesh.triangleSets.push_back(std::move(triangleSet));
+    scene.meshes.push_back(std::move(mesh));
+
+    const auto json = spice::mld::exporting::BlenderIrJsonExporter{}.toJson(scene);
+    EXPECT_NE(json.find("\"rawUserAttributesU32\":4294967295"), std::string::npos);
+    EXPECT_NE(json.find("\"triangleMetadata\":[{\"rawU16\":[0,65535,32768]}]"), std::string::npos);
+    EXPECT_EQ(json.find("collisionTriangles"), std::string::npos);
+    EXPECT_EQ(json.find("selectorLow15"), std::string::npos);
+    EXPECT_EQ(json.find("encounterTableId"), std::string::npos);
 }
