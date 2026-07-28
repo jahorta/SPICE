@@ -92,7 +92,52 @@ std::vector<std::uint8_t> makeEntryTableStd()
     for (std::size_t i = 0U; i < 8U; ++i) {
         bytes[0x44U + i] = static_cast<std::uint8_t>(0x10U + i);
     }
+    bytes[0x4cU] = 0xdeU;
+    bytes[0x4dU] = 0xadU;
+    bytes[0x4eU] = 0xbeU;
+    bytes[0x4fU] = 0xefU;
     return bytes;
+}
+
+std::vector<std::uint8_t> makeActionViewEntryTableStd()
+{
+    std::vector<std::uint8_t> bytes(0x54U, 0U);
+    writeBeU16(bytes, 0x00U, 2U);
+    writeBeU16(bytes, 0x02U, 4U);
+    writeBeU32(bytes, 0x0cU, 0x44U);
+
+    std::size_t entry = 0x10U;
+    writeBeS16(bytes, entry + 0x00U, 0x2a);
+    writeBeS16(bytes, entry + 0x02U, 3);
+    writeBeU32(bytes, entry + 0x08U, 0x24U);
+    writeBeU32(bytes, entry + 0x0cU, 0x20U);
+
+    entry += 0x10U;
+    writeBeS16(bytes, entry + 0x00U, -1);
+
+    const std::size_t payload = 0x30U;
+    writeBeS16(bytes, payload + 0x00U, 4);
+    writeBeS16(bytes, payload + 0x02U, 2);
+    writeBeS16(bytes, payload + 0x04U, -1);
+    writeBeU16(bytes, payload + 0x06U, 0x2000U);
+    writeBeU32(bytes, payload + 0x10U, 0x80000000U);
+    writeBeU32(bytes, payload + 0x14U, 0x3f800000U);
+    writeBeS16(bytes, payload + 0x18U, 5);
+    writeBeS16(bytes, payload + 0x1cU, 20);
+    writeBeS16(bytes, payload + 0x1eU, 7);
+    writeBeS16(bytes, payload + 0x20U, 8);
+    writeBeS16(bytes, payload + 0x22U, 0);
+    return bytes;
+}
+
+void expectContiguousDecodedRanges(const spice::stdfile::StdFile& file)
+{
+    std::size_t cursor = 0U;
+    for (const auto& range : file.sourceRanges) {
+        EXPECT_EQ(range.offset, cursor);
+        cursor += range.size;
+    }
+    EXPECT_EQ(cursor, file.decodedBytes.size());
 }
 
 } // namespace
@@ -103,6 +148,7 @@ TEST(SpiceStdParser, ParsesActionRowsAndExportsDecodedBytes)
     const auto parsed = spice::stdfile::parseBytes(bytes, "ma000.std");
 
     ASSERT_TRUE(parsed.ok());
+    EXPECT_EQ(parsed.parseStatus, spice::stdfile::StdParseStatus::Complete);
     EXPECT_EQ(parsed.sourceEncoding, spice::stdfile::StdSourceEncoding::Plain);
     EXPECT_EQ(parsed.layoutKind, spice::stdfile::StdLayoutKind::ActionRows);
     EXPECT_EQ(parsed.rawSize, static_cast<std::uint32_t>(bytes.size()));
@@ -119,6 +165,7 @@ TEST(SpiceStdParser, ParsesActionRowsAndExportsDecodedBytes)
     EXPECT_EQ(parsed.actionRows.rows[0].callbackAuxParam, 14);
     EXPECT_EQ(parsed.actionRows.rows[0].selectionTransitionScalarBits, 0x40a00000U);
     EXPECT_EQ(parsed.actionRows.rows[0].motionProgressScalarBits, 0x3f800000U);
+    expectContiguousDecodedRanges(parsed);
 
     const auto exported = spice::stdfile::exportBytes(parsed, spice::stdfile::StdExportMode::DecodedBytes);
     ASSERT_TRUE(exported.ok());
@@ -131,6 +178,7 @@ TEST(SpiceStdParser, ParsesEntryTableAndPreservesPayloadSpans)
     const auto parsed = spice::stdfile::parseBytes(bytes, "ma0000.std");
 
     ASSERT_TRUE(parsed.ok());
+    EXPECT_EQ(parsed.parseStatus, spice::stdfile::StdParseStatus::Complete);
     EXPECT_EQ(parsed.layoutKind, spice::stdfile::StdLayoutKind::EntryTable);
     EXPECT_EQ(parsed.entryTable.header.recordCountIncludingSentinel, 3U);
     EXPECT_EQ(parsed.entryTable.header.kind, 4U);
@@ -153,6 +201,11 @@ TEST(SpiceStdParser, ParsesEntryTableAndPreservesPayloadSpans)
     EXPECT_EQ(parsed.entryTable.records[1].combinedType, 0x00050005U);
     EXPECT_TRUE(parsed.entryTable.records[1].payloadInBounds);
     EXPECT_TRUE(parsed.entryTable.records[2].isSentinel);
+    EXPECT_EQ(parsed.entryTable.records[0].payloadBytes, (std::vector<std::uint8_t>{ 0xaaU, 0xbbU, 0xccU, 0xddU }));
+    ASSERT_EQ(parsed.unknownRanges.size(), 1U);
+    EXPECT_EQ(parsed.unknownRanges[0].offset, 0x4cU);
+    EXPECT_EQ(parsed.unknownRanges[0].bytes, (std::vector<std::uint8_t>{ 0xdeU, 0xadU, 0xbeU, 0xefU }));
+    expectContiguousDecodedRanges(parsed);
 
     const auto exported = spice::stdfile::exportBytes(parsed, spice::stdfile::StdExportMode::DecodedBytes);
     ASSERT_TRUE(exported.ok());
@@ -243,6 +296,114 @@ TEST(SpiceStdParser, PreservesOriginalAklzBytesAndCanReencode)
     EXPECT_EQ(decodedAgain.bytes, decoded);
 }
 
+TEST(SpiceStdWriter, ReturnsExactSourceWhenUnchanged)
+{
+    const auto bytes = makeActionRowsStd();
+    const auto parsed = spice::stdfile::parseBytes(bytes, "ma000.std");
+    ASSERT_TRUE(parsed.ok());
+
+    const auto written = spice::stdfile::StdFileWriter{}.write(parsed);
+    ASSERT_TRUE(written.ok());
+    EXPECT_EQ(written.bytes, bytes);
+}
+
+TEST(SpiceStdWriter, PreservesAklzSourceWhenUnchanged)
+{
+    const auto decoded = makeActionRowsStd();
+    const auto compressed = spice::compression::aklz::compress(decoded);
+    ASSERT_TRUE(compressed.ok());
+    const auto parsed = spice::stdfile::parseBytes(compressed.bytes, "ma000.std");
+    ASSERT_TRUE(parsed.ok());
+
+    const auto written = spice::stdfile::StdFileWriter{}.write(parsed);
+    ASSERT_TRUE(written.ok());
+    EXPECT_EQ(written.bytes, compressed.bytes);
+}
+
+TEST(SpiceStdWriter, RebuildsEditedActionRowsFromModel)
+{
+    const auto bytes = makeActionRowsStd();
+    auto parsed = spice::stdfile::parseBytes(bytes, "ma000.std");
+    ASSERT_TRUE(parsed.ok());
+
+    parsed.actionRows.rows[0].callbackIndex = 11;
+    const auto written = spice::stdfile::StdFileWriter{}.write(parsed);
+    ASSERT_TRUE(written.ok());
+    const auto reparsed = spice::stdfile::parseBytes(written.bytes, "ma000.std");
+    ASSERT_TRUE(reparsed.ok());
+    ASSERT_EQ(reparsed.actionRows.rows.size(), 2U);
+    EXPECT_EQ(reparsed.actionRows.rows[0].callbackIndex, 11);
+}
+
+TEST(SpiceStdWriter, RebuildsSameSizeEntryPayloadFromModel)
+{
+    const auto bytes = makeEntryTableStd();
+    auto parsed = spice::stdfile::parseBytes(bytes, "ma0000.std");
+    ASSERT_TRUE(parsed.ok());
+    auto* payload = spice::stdfile::findMutableEntryPayload(parsed, 0U);
+    ASSERT_NE(payload, nullptr);
+    ASSERT_EQ(payload->size(), 4U);
+    (*payload)[0] = 0xeeU;
+
+    const auto written = spice::stdfile::StdFileWriter{}.write(parsed);
+    ASSERT_TRUE(written.ok());
+    const auto reparsed = spice::stdfile::parseBytes(written.bytes, "ma0000.std");
+    ASSERT_TRUE(reparsed.ok());
+    const auto* reparsedPayload = spice::stdfile::findEntryPayload(reparsed, 0U);
+    ASSERT_NE(reparsedPayload, nullptr);
+    EXPECT_EQ(*reparsedPayload, (std::vector<std::uint8_t>{ 0xeeU, 0xbbU, 0xccU, 0xddU }));
+    ASSERT_EQ(reparsed.unknownRanges.size(), 1U);
+    EXPECT_EQ(reparsed.unknownRanges[0].bytes, (std::vector<std::uint8_t>{ 0xdeU, 0xadU, 0xbeU, 0xefU }));
+}
+
+TEST(SpiceStdWriter, PreservesEntryHeaderSpanWordWhenSourceHasTrailingDelta)
+{
+    auto bytes = makeEntryTableStd();
+    writeBeU32(bytes, 0x0cU, 0x30U);
+    const auto parsed = spice::stdfile::parseBytes(bytes, "ma0000.std");
+    ASSERT_TRUE(parsed.ok());
+    EXPECT_EQ(parsed.entryTable.headerSpanDelta, 0x10);
+
+    const auto written = spice::stdfile::StdFileWriter{}.write(parsed);
+    ASSERT_TRUE(written.ok());
+    EXPECT_EQ(written.bytes, bytes);
+}
+
+TEST(SpiceStdActionViewPayload, ProjectsAndWritesGuardedPayload)
+{
+    const auto bytes = makeActionViewEntryTableStd();
+    auto parsed = spice::stdfile::parseBytes(bytes, "ma0000.std");
+    ASSERT_TRUE(parsed.ok());
+    ASSERT_EQ(parsed.entryTable.records.size(), 2U);
+
+    auto payload = spice::stdfile::readActionViewPayload(parsed.entryTable.records[0]);
+    ASSERT_TRUE(payload.has_value());
+    EXPECT_EQ(payload->primaryActionKey, 4);
+    EXPECT_EQ(payload->routeSecondaryKey, 2);
+    EXPECT_EQ(payload->directSecondaryKey, -1);
+    EXPECT_EQ(payload->lowFlags, 0x2000U);
+    EXPECT_EQ(payload->actionViewFlags, 0x80000000U);
+    EXPECT_EQ(payload->modeLocalAngleOrOffsetBits, 0x3f800000U);
+    EXPECT_EQ(payload->startFrame, 5);
+    EXPECT_EQ(payload->endFrame, 20);
+    EXPECT_EQ(payload->holdFrameCount, 7);
+    EXPECT_EQ(payload->stepFrameCount, 8);
+    EXPECT_EQ(payload->requestedMode, 0);
+
+    payload->requestedMode = 7;
+    payload->startFrame = 6;
+    ASSERT_TRUE(spice::stdfile::writeActionViewPayload(parsed.entryTable.records[0], *payload));
+
+    const auto written = spice::stdfile::StdFileWriter{}.write(parsed);
+    ASSERT_TRUE(written.ok());
+    const auto reparsed = spice::stdfile::parseBytes(written.bytes, "ma0000.std");
+    ASSERT_TRUE(reparsed.ok());
+    const auto reparsedPayload = spice::stdfile::readActionViewPayload(reparsed.entryTable.records[0]);
+    ASSERT_TRUE(reparsedPayload.has_value());
+    EXPECT_EQ(reparsedPayload->requestedMode, 7);
+    EXPECT_EQ(reparsedPayload->startFrame, 6);
+}
+
 TEST(SpiceStdParser, KeepsRawBytesAvailableWhenLayoutIsUnknown)
 {
     std::vector<std::uint8_t> bytes(0x20U, 0U);
@@ -250,6 +411,7 @@ TEST(SpiceStdParser, KeepsRawBytesAvailableWhenLayoutIsUnknown)
 
     const auto parsed = spice::stdfile::parseBytes(bytes, "unknown.std");
     EXPECT_FALSE(parsed.ok());
+    EXPECT_EQ(parsed.parseStatus, spice::stdfile::StdParseStatus::Failed);
     EXPECT_EQ(parsed.layoutKind, spice::stdfile::StdLayoutKind::Unknown);
     ASSERT_FALSE(parsed.diagnostics.empty());
 
@@ -280,4 +442,54 @@ TEST(SpiceStdParser, DoesNotReencodeWhenAklzDecodeFails)
     const auto reencoded = spice::stdfile::exportBytes(parsed, spice::stdfile::StdExportMode::ReencodeAklz);
     EXPECT_FALSE(reencoded.ok());
     EXPECT_TRUE(reencoded.bytes.empty());
+}
+
+TEST(SpiceStdParser, MarksMissingSentinelAsPartial)
+{
+    auto bytes = makeEntryTableStd();
+    writeBeS16(bytes, 0x30U, 0);
+
+    const auto parsed = spice::stdfile::parseBytes(bytes, "ma0000.std");
+    EXPECT_FALSE(parsed.ok());
+    EXPECT_EQ(parsed.layoutKind, spice::stdfile::StdLayoutKind::EntryTable);
+    EXPECT_EQ(parsed.parseStatus, spice::stdfile::StdParseStatus::Partial);
+}
+
+TEST(SpiceStdParser, MarksOutOfBoundsPayloadAsPartial)
+{
+    auto bytes = makeEntryTableStd();
+    writeBeU32(bytes, 0x1cU, 0xffffU);
+
+    const auto parsed = spice::stdfile::parseBytes(bytes, "ma0000.std");
+    EXPECT_FALSE(parsed.ok());
+    EXPECT_EQ(parsed.layoutKind, spice::stdfile::StdLayoutKind::EntryTable);
+    EXPECT_EQ(parsed.parseStatus, spice::stdfile::StdParseStatus::Partial);
+}
+
+TEST(SpiceStdParser, MarksOverlappingPayloadsAsPartialAndWriterRejects)
+{
+    auto bytes = makeEntryTableStd();
+    writeBeU32(bytes, 0x2cU, 0x32U);
+
+    const auto parsed = spice::stdfile::parseBytes(bytes, "ma0000.std");
+    EXPECT_FALSE(parsed.ok());
+    EXPECT_EQ(parsed.layoutKind, spice::stdfile::StdLayoutKind::EntryTable);
+    EXPECT_EQ(parsed.parseStatus, spice::stdfile::StdParseStatus::Partial);
+
+    const auto written = spice::stdfile::StdFileWriter{}.write(parsed);
+    EXPECT_FALSE(written.ok());
+    EXPECT_TRUE(written.bytes.empty());
+}
+
+TEST(SpiceStdWriter, RejectsEntryPayloadSizeChanges)
+{
+    auto parsed = spice::stdfile::parseBytes(makeEntryTableStd(), "ma0000.std");
+    ASSERT_TRUE(parsed.ok());
+    auto* payload = spice::stdfile::findMutableEntryPayload(parsed, 0U);
+    ASSERT_NE(payload, nullptr);
+    payload->push_back(0x99U);
+
+    const auto written = spice::stdfile::StdFileWriter{}.write(parsed);
+    EXPECT_FALSE(written.ok());
+    EXPECT_TRUE(written.bytes.empty());
 }
