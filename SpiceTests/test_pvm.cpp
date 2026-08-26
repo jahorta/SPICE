@@ -1,0 +1,644 @@
+#include "SpicePvm/SpicePvm.h"
+
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <map>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace {
+
+using spice::pvm::model::DataLayout;
+using spice::pvm::model::ParseStatus;
+using spice::pvm::model::PixelFormat;
+
+void appendU16(std::vector<std::uint8_t>& bytes, const std::uint16_t value)
+{
+    bytes.push_back(static_cast<std::uint8_t>(value));
+    bytes.push_back(static_cast<std::uint8_t>(value >> 8));
+}
+
+void appendU32(std::vector<std::uint8_t>& bytes, const std::uint32_t value)
+{
+    bytes.push_back(static_cast<std::uint8_t>(value));
+    bytes.push_back(static_cast<std::uint8_t>(value >> 8));
+    bytes.push_back(static_cast<std::uint8_t>(value >> 16));
+    bytes.push_back(static_cast<std::uint8_t>(value >> 24));
+}
+
+void writeU16(std::vector<std::uint8_t>& bytes, const std::size_t offset, const std::uint16_t value)
+{
+    bytes[offset] = static_cast<std::uint8_t>(value);
+    bytes[offset + 1] = static_cast<std::uint8_t>(value >> 8);
+}
+
+void writeU32(std::vector<std::uint8_t>& bytes, const std::size_t offset, const std::uint32_t value)
+{
+    bytes[offset] = static_cast<std::uint8_t>(value);
+    bytes[offset + 1] = static_cast<std::uint8_t>(value >> 8);
+    bytes[offset + 2] = static_cast<std::uint8_t>(value >> 16);
+    bytes[offset + 3] = static_cast<std::uint8_t>(value >> 24);
+}
+
+std::size_t twiddle(const std::uint32_t value)
+{
+    std::size_t result = 0;
+    for (unsigned bit = 0; bit < 16; ++bit)
+        result |= static_cast<std::size_t>((value >> bit) & 1U) << (bit * 2U);
+    return result;
+}
+
+std::uint16_t sampleWord(const PixelFormat format, const unsigned sample)
+{
+    switch (format) {
+    case PixelFormat::Argb1555:
+        return static_cast<std::uint16_t>(0x8000U |
+            ((sample * 3U & 31U) << 10) | ((sample * 5U & 31U) << 5) | (sample * 7U & 31U));
+    case PixelFormat::Rgb565:
+        return static_cast<std::uint16_t>(((sample * 3U & 31U) << 11) |
+            ((sample * 5U & 63U) << 5) | (sample * 7U & 31U));
+    case PixelFormat::Argb4444:
+        return static_cast<std::uint16_t>(((sample + 1U & 15U) << 12) |
+            ((sample * 3U & 15U) << 8) | ((sample * 5U & 15U) << 4) | (sample * 7U & 15U));
+    default:
+        return 0;
+    }
+}
+
+void appendWord(std::vector<std::uint8_t>& bytes, const std::uint16_t value)
+{
+    appendU16(bytes, value);
+}
+
+std::vector<std::uint8_t> directLevel(const PixelFormat format, const std::uint32_t size, const bool twiddled)
+{
+    std::vector<std::uint8_t> result(static_cast<std::size_t>(size) * size * 2);
+    for (std::uint32_t y = 0; y < size; ++y) {
+        for (std::uint32_t x = 0; x < size; ++x) {
+            const std::size_t index = twiddled
+                ? ((twiddle(x) << 1) | twiddle(y))
+                : (static_cast<std::size_t>(y) * size + x);
+            writeU16(result, index * 2, sampleWord(format, x + y * size + size));
+        }
+    }
+    return result;
+}
+
+std::size_t smallCodebookEntries(const std::uint32_t size, const bool mipmapped)
+{
+    if (mipmapped) {
+        if (size <= 16) return 16;
+        if (size <= 32) return 64;
+        return 256;
+    }
+    if (size <= 16) return 16;
+    if (size <= 32) return 32;
+    return 128;
+}
+
+std::vector<std::uint8_t> vqPayload(
+    const PixelFormat format,
+    const std::uint32_t baseSize,
+    const bool mipmapped,
+    const bool small)
+{
+    const std::size_t entries = small ? smallCodebookEntries(baseSize, mipmapped) : 256;
+    std::vector<std::uint8_t> result;
+    result.reserve(entries * 8 + static_cast<std::size_t>(baseSize) * baseSize / 4 + 16);
+    for (std::size_t entry = 0; entry < entries; ++entry) {
+        for (unsigned color = 0; color < 4; ++color)
+            appendWord(result, sampleWord(format, static_cast<unsigned>(entry * 4 + color + 1)));
+    }
+
+    auto appendIndices = [&](const std::uint32_t size) {
+        const std::size_t count = std::max<std::size_t>(static_cast<std::size_t>(size) * size / 4, 1);
+        const std::size_t offset = result.size();
+        result.resize(offset + count);
+        if (size == 1) {
+            result[offset] = 0;
+            return;
+        }
+        for (std::uint32_t y = 0; y < size; y += 2) {
+            for (std::uint32_t x = 0; x < size; x += 2) {
+                const std::size_t position = (twiddle(x >> 1) << 1) | twiddle(y >> 1);
+                result[offset + position] = static_cast<std::uint8_t>((x / 2 + y / 2 * (size / 2)) % entries);
+            }
+        }
+    };
+
+    if (mipmapped) {
+        for (std::uint32_t size = 1;; size <<= 1) {
+            appendIndices(size);
+            if (size == baseSize) break;
+        }
+    } else {
+        appendIndices(baseSize);
+    }
+    return result;
+}
+
+std::vector<std::uint8_t> payloadFor(
+    const PixelFormat format,
+    const DataLayout layout,
+    const std::uint32_t width,
+    const std::uint32_t height)
+{
+    if (layout == DataLayout::Rectangle) {
+        std::vector<std::uint8_t> bytes;
+        for (std::uint32_t y = 0; y < height; ++y)
+            for (std::uint32_t x = 0; x < width; ++x)
+                appendWord(bytes, sampleWord(format, x + y * width + 1));
+        return bytes;
+    }
+    if (layout == DataLayout::Vq || layout == DataLayout::VqMipmaps ||
+        layout == DataLayout::SmallVq || layout == DataLayout::SmallVqMipmaps) {
+        return vqPayload(format, width,
+            layout == DataLayout::VqMipmaps || layout == DataLayout::SmallVqMipmaps,
+            layout == DataLayout::SmallVq || layout == DataLayout::SmallVqMipmaps);
+    }
+
+    std::vector<std::uint8_t> bytes;
+    const bool mipmapped = layout == DataLayout::TwiddledMipmaps ||
+        layout == DataLayout::TwiddledMipmapsDma;
+    if (mipmapped)
+        bytes.resize(layout == DataLayout::TwiddledMipmapsDma ? 6 : 2, 0xDD);
+    if (mipmapped) {
+        for (std::uint32_t size = 1;; size <<= 1) {
+            auto level = directLevel(format, size, true);
+            bytes.insert(bytes.end(), level.begin(), level.end());
+            if (size == width) break;
+        }
+    } else {
+        bytes = directLevel(format, width, true);
+    }
+    return bytes;
+}
+
+std::vector<std::uint8_t> makePvr(
+    const PixelFormat pixelFormat,
+    const DataLayout layout,
+    const std::uint16_t width,
+    const std::uint16_t height,
+    const std::vector<std::uint8_t>& payload,
+    const std::optional<std::uint32_t> globalIndex = std::nullopt)
+{
+    std::vector<std::uint8_t> bytes;
+    if (globalIndex.has_value()) {
+        bytes.insert(bytes.end(), {'G', 'B', 'I', 'X'});
+        appendU32(bytes, 8);
+        appendU32(bytes, *globalIndex);
+        appendU32(bytes, 0);
+    }
+    bytes.insert(bytes.end(), {'P', 'V', 'R', 'T'});
+    appendU32(bytes, static_cast<std::uint32_t>(payload.size() + 8));
+    bytes.push_back(static_cast<std::uint8_t>(pixelFormat));
+    bytes.push_back(static_cast<std::uint8_t>(layout));
+    bytes.push_back(0xA5);
+    bytes.push_back(0x5A);
+    appendU16(bytes, width);
+    appendU16(bytes, height);
+    bytes.insert(bytes.end(), payload.begin(), payload.end());
+    return bytes;
+}
+
+std::array<std::uint8_t, 4> pixelAt(const spice::pvm::model::RgbaImage& image,
+    const std::uint32_t x, const std::uint32_t y)
+{
+    const std::size_t offset = (static_cast<std::size_t>(y) * image.width + x) * 4;
+    return {image.pixels[offset], image.pixels[offset + 1], image.pixels[offset + 2], image.pixels[offset + 3]};
+}
+
+std::vector<std::uint8_t> makePvm(const std::vector<std::vector<std::uint8_t>>& textures,
+    const bool introduceFormatMismatch = false)
+{
+    constexpr std::uint16_t flags = 0x000F;
+    constexpr std::size_t entrySize = 38;
+    const std::size_t unpaddedHeaderSize = 12 + entrySize * textures.size();
+    const std::size_t paddedHeaderSize = (unpaddedHeaderSize + 15) & ~std::size_t{15};
+    std::vector<std::uint8_t> bytes(paddedHeaderSize, 0);
+    std::copy_n("PVMH", 4, bytes.begin());
+    writeU32(bytes, 4, static_cast<std::uint32_t>(paddedHeaderSize - 8));
+    writeU16(bytes, 8, flags);
+    writeU16(bytes, 10, static_cast<std::uint16_t>(textures.size()));
+    for (std::size_t i = 0; i < textures.size(); ++i) {
+        const std::size_t entry = 12 + i * entrySize;
+        writeU16(bytes, entry, static_cast<std::uint16_t>(i));
+        const std::string name = "texture_" + std::to_string(i);
+        std::copy(name.begin(), name.end(), bytes.begin() + static_cast<std::ptrdiff_t>(entry + 2));
+        bytes[entry + 30] = static_cast<std::uint8_t>(PixelFormat::Rgb565);
+        bytes[entry + 31] = static_cast<std::uint8_t>(DataLayout::Twiddled);
+        if (introduceFormatMismatch && i == 0)
+            bytes[entry + 31] = static_cast<std::uint8_t>(DataLayout::Rectangle);
+        writeU16(bytes, entry + 32, 0x0000); // 4x4
+        writeU32(bytes, entry + 34, static_cast<std::uint32_t>(100 + i));
+    }
+    for (const auto& texture : textures) {
+        const std::size_t pvrt = texture[0] == 'G' ? 16 : 0;
+        bytes.insert(bytes.end(), texture.begin() + static_cast<std::ptrdiff_t>(pvrt), texture.end());
+    }
+    return bytes;
+}
+
+TEST(SpicePvmParser, ParsesPvrtOnlyAndGbixPvrt)
+{
+    const auto payload = payloadFor(PixelFormat::Rgb565, DataLayout::Twiddled, 4, 4);
+    const auto standalone = makePvr(PixelFormat::Rgb565, DataLayout::Twiddled, 4, 4, payload);
+    const auto parsed = spice::pvm::parsing::parsePvrTexture(standalone);
+    ASSERT_EQ(parsed.status, ParseStatus::Complete);
+    EXPECT_FALSE(parsed.gbixRange.has_value());
+    EXPECT_EQ(parsed.pvrtRange.offset, 0U);
+    EXPECT_EQ(parsed.textureDataRange.size, 32U);
+    EXPECT_EQ(parsed.pvrtUnknownHeader, (std::vector<std::uint8_t>{0xA5, 0x5A}));
+    EXPECT_EQ(parsed.sourceBytes, standalone);
+
+    const auto indexed = makePvr(PixelFormat::Rgb565, DataLayout::Twiddled, 4, 4, payload, 0x12345678);
+    const auto indexedParsed = spice::pvm::parsing::parsePvrTexture(indexed);
+    ASSERT_EQ(indexedParsed.status, ParseStatus::Complete);
+    ASSERT_TRUE(indexedParsed.globalIndex.has_value());
+    EXPECT_EQ(*indexedParsed.globalIndex, 0x12345678U);
+    EXPECT_EQ(indexedParsed.pvrtRange.offset, 16U);
+}
+
+TEST(SpicePvmParser, ScansEmbeddedTexturesAndChecksExpectedCount)
+{
+    std::vector<std::uint8_t> embedded(13, 0xCC);
+    const auto one = makePvr(PixelFormat::Rgb565, DataLayout::Twiddled, 4, 4,
+        payloadFor(PixelFormat::Rgb565, DataLayout::Twiddled, 4, 4));
+    const auto two = makePvr(PixelFormat::Argb4444, DataLayout::Rectangle, 3, 2,
+        payloadFor(PixelFormat::Argb4444, DataLayout::Rectangle, 3, 2));
+    embedded.insert(embedded.end(), one.begin(), one.end());
+    embedded.insert(embedded.end(), 7, 0xEE);
+    embedded.insert(embedded.end(), two.begin(), two.end());
+    const auto scan = spice::pvm::parsing::scanPvrTextures(embedded, 5, 2);
+    ASSERT_EQ(scan.status, ParseStatus::Complete);
+    ASSERT_EQ(scan.textures.size(), 2U);
+    EXPECT_EQ(scan.textures[0].sourceRange.offset, 13U);
+    const auto mismatch = spice::pvm::parsing::scanPvrTextures(embedded, 5, 3);
+    EXPECT_EQ(mismatch.status, ParseStatus::Partial);
+    EXPECT_EQ(mismatch.textures.size(), 2U);
+}
+
+TEST(SpicePvmParser, PreservesUnknownIdentifiersAndRejectsTruncationAndOverflow)
+{
+    auto unknown = makePvr(PixelFormat::Unknown, DataLayout::Unknown, 4, 4, {});
+    unknown[8] = 0x7A;
+    unknown[9] = 0x7B;
+    const auto parsed = spice::pvm::parsing::parsePvrTexture(unknown);
+    EXPECT_EQ(parsed.status, ParseStatus::Partial);
+    EXPECT_EQ(parsed.rawPixelFormat, 0x7A);
+    EXPECT_EQ(parsed.rawDataLayout, 0x7B);
+    EXPECT_EQ(spice::pvm::decoding::decodePvrTexture(parsed).status, ParseStatus::Failed);
+
+    auto truncated = makePvr(PixelFormat::Rgb565, DataLayout::Rectangle, 1, 1, {0, 0});
+    truncated.pop_back();
+    EXPECT_EQ(spice::pvm::parsing::parsePvrTexture(truncated).status, ParseStatus::Failed);
+    std::vector<std::uint8_t> overflow{'P', 'V', 'R', 'T', 0xFF, 0xFF, 0xFF, 0xFF};
+    EXPECT_EQ(spice::pvm::parsing::parsePvrTexture(overflow).status, ParseStatus::Failed);
+}
+
+TEST(SpicePvmParser, ParsesMultiEntryPvmAndDiagnosesCountAndIdentityMismatches)
+{
+    const auto pvr0 = makePvr(PixelFormat::Rgb565, DataLayout::Twiddled, 4, 4,
+        payloadFor(PixelFormat::Rgb565, DataLayout::Twiddled, 4, 4), 100);
+    const auto pvr1 = makePvr(PixelFormat::Rgb565, DataLayout::Twiddled, 4, 4,
+        payloadFor(PixelFormat::Rgb565, DataLayout::Twiddled, 4, 4), 101);
+    const auto bytes = makePvm({pvr0, pvr1});
+    const auto archive = spice::pvm::parsing::parsePvmArchive(bytes);
+    ASSERT_EQ(archive.status, ParseStatus::Complete);
+    ASSERT_EQ(archive.entries.size(), 2U);
+    EXPECT_EQ(archive.entries[0].name, "texture_0");
+    ASSERT_TRUE(archive.entries[1].texture.has_value());
+    EXPECT_EQ(archive.entries[1].texture->width, 4);
+    EXPECT_EQ(archive.sourceBytes, bytes);
+
+    auto invalidCount = bytes;
+    writeU16(invalidCount, 10, 0xFFFF);
+    EXPECT_EQ(spice::pvm::parsing::parsePvmArchive(invalidCount).status, ParseStatus::Failed);
+    const auto mismatch = spice::pvm::parsing::parsePvmArchive(makePvm({pvr0}, true));
+    EXPECT_EQ(mismatch.status, ParseStatus::Partial);
+}
+
+TEST(SpicePvmParser, InterpretsOptionalPvmhFieldsAndPreservesInterstitialMetadata)
+{
+    const auto pvr = makePvr(PixelFormat::Rgb565, DataLayout::Twiddled, 4, 4,
+        payloadFor(PixelFormat::Rgb565, DataLayout::Twiddled, 4, 4));
+    std::vector<std::uint8_t> bytes(16, 0);
+    std::copy_n("PVMH", 4, bytes.begin());
+    writeU32(bytes, 4, 8); // flags/count, one index-only entry, two padding bytes
+    writeU16(bytes, 8, 0);
+    writeU16(bytes, 10, 1);
+    writeU16(bytes, 12, 7);
+    bytes.insert(bytes.end(), {'C', 'O', 'M', 'M', 0, 0, 0, 0});
+    bytes.insert(bytes.end(), pvr.begin(), pvr.end());
+
+    const auto archive = spice::pvm::parsing::parsePvmArchive(bytes);
+    ASSERT_EQ(archive.status, ParseStatus::Partial); // non-sequential retained index
+    ASSERT_EQ(archive.entries.size(), 1U);
+    EXPECT_TRUE(archive.entries[0].name.empty());
+    EXPECT_FALSE(archive.entries[0].rawPixelFormat.has_value());
+    EXPECT_FALSE(archive.entries[0].rawDimensions.has_value());
+    EXPECT_FALSE(archive.entries[0].globalIndex.has_value());
+    EXPECT_EQ(archive.interstitialMetadata,
+        (std::vector<std::uint8_t>{'C', 'O', 'M', 'M', 0, 0, 0, 0}));
+}
+
+TEST(SpicePvmDecoder, ConvertsAllObservedColorFormatsExactly)
+{
+    struct Case { PixelFormat format; std::vector<std::uint16_t> words; std::vector<std::array<std::uint8_t, 4>> expected; };
+    const std::vector<Case> cases{
+        {PixelFormat::Argb1555, {0x0000, 0xFFFF, 0x94E7}, {{0,0,0,0}, {255,255,255,255}, {41,57,57,255}}},
+        {PixelFormat::Rgb565, {0x0000, 0xFFFF, 0x7BEF}, {{0,0,0,255}, {255,255,255,255}, {123,125,123,255}}},
+        {PixelFormat::Argb4444, {0x0000, 0xFFFF, 0xA53C}, {{0,0,0,0}, {255,255,255,255}, {85,51,204,170}}},
+    };
+    for (const auto& test : cases) {
+        std::vector<std::uint8_t> payload;
+        for (const auto word : test.words) appendWord(payload, word);
+        const auto decoded = spice::pvm::decoding::decodePvrTexture(
+            spice::pvm::parsing::parsePvrTexture(
+                makePvr(test.format, DataLayout::Rectangle,
+                    static_cast<std::uint16_t>(test.words.size()), 1, payload)));
+        ASSERT_EQ(decoded.status, ParseStatus::Complete);
+        for (std::size_t i = 0; i < test.expected.size(); ++i)
+            EXPECT_EQ(pixelAt(decoded.mipLevels[0].image, static_cast<std::uint32_t>(i), 0), test.expected[i]);
+    }
+}
+
+TEST(SpicePvmDecoder, DecodesEveryObservedLayoutForEveryObservedPixelFormat)
+{
+    const std::array formats{PixelFormat::Argb1555, PixelFormat::Rgb565, PixelFormat::Argb4444};
+    const std::array layouts{
+        DataLayout::Twiddled, DataLayout::TwiddledMipmaps,
+        DataLayout::Vq, DataLayout::VqMipmaps, DataLayout::Rectangle,
+        DataLayout::SmallVq, DataLayout::SmallVqMipmaps,
+        DataLayout::TwiddledMipmapsDma};
+    for (const auto format : formats) {
+        for (const auto layout : layouts) {
+            const bool rectangle = layout == DataLayout::Rectangle;
+            const bool small = layout == DataLayout::SmallVq || layout == DataLayout::SmallVqMipmaps;
+            const std::uint16_t width = rectangle ? 3 : (small ? 16 : 4);
+            const std::uint16_t height = rectangle ? 2 : width;
+            const auto parsed = spice::pvm::parsing::parsePvrTexture(
+                makePvr(format, layout, width, height, payloadFor(format, layout, width, height)));
+            ASSERT_NE(parsed.status, ParseStatus::Failed);
+            const auto decoded = spice::pvm::decoding::decodePvrTexture(parsed);
+            ASSERT_EQ(decoded.status, ParseStatus::Complete)
+                << "format=" << static_cast<int>(format) << " layout=" << static_cast<int>(layout);
+            ASSERT_FALSE(decoded.mipLevels.empty());
+            EXPECT_EQ(decoded.mipLevels.front().width, width);
+            EXPECT_EQ(decoded.mipLevels.front().height, height);
+            EXPECT_EQ(decoded.mipLevels.front().image.pixels.size(),
+                static_cast<std::size_t>(width) * height * 4);
+        }
+    }
+}
+
+TEST(SpicePvmDecoder, SmallVqUsesSdkCodebookSizesAtAllObservedDimensions)
+{
+    for (const std::uint16_t size : {16, 32, 64}) {
+        for (const auto layout : {DataLayout::SmallVq, DataLayout::SmallVqMipmaps}) {
+            const auto texture = spice::pvm::parsing::parsePvrTexture(
+                makePvr(PixelFormat::Rgb565, layout, size, size,
+                    payloadFor(PixelFormat::Rgb565, layout, size, size)));
+            const auto decoded = spice::pvm::decoding::decodePvrTexture(texture);
+            ASSERT_EQ(decoded.status, ParseStatus::Complete) << "size=" << size;
+            const std::size_t expectedEntries = smallCodebookEntries(size, layout == DataLayout::SmallVqMipmaps);
+            EXPECT_EQ(decoded.codebookRange.size, expectedEntries * 8);
+        }
+    }
+}
+
+TEST(SpicePvmDecoder, ReturnsMipmapsLargestFirstWithPhysicalRangesPreserved)
+{
+    for (const auto layout : {DataLayout::TwiddledMipmaps, DataLayout::VqMipmaps,
+             DataLayout::SmallVqMipmaps, DataLayout::TwiddledMipmapsDma}) {
+        const std::uint16_t size = layout == DataLayout::SmallVqMipmaps ? 16 : 4;
+        const auto texture = spice::pvm::parsing::parsePvrTexture(
+            makePvr(PixelFormat::Rgb565, layout, size, size,
+                payloadFor(PixelFormat::Rgb565, layout, size, size)));
+        const auto decoded = spice::pvm::decoding::decodePvrTexture(texture);
+        ASSERT_EQ(decoded.status, ParseStatus::Complete);
+        EXPECT_EQ(decoded.mipLevels.front().width, size);
+        EXPECT_EQ(decoded.mipLevels.back().width, 1U);
+        EXPECT_GT(decoded.mipLevels.front().sourceRange.offset,
+            decoded.mipLevels.back().sourceRange.offset);
+        for (const auto& level : decoded.mipLevels)
+            EXPECT_EQ(level.image.pixels.size(),
+                static_cast<std::size_t>(level.width) * level.height * 4);
+    }
+}
+
+TEST(SpicePvmDecoder, ExposesMortonAndVqVectorOrientation)
+{
+    const auto twiddledTexture = spice::pvm::parsing::parsePvrTexture(
+        makePvr(PixelFormat::Rgb565, DataLayout::Twiddled, 4, 4,
+            payloadFor(PixelFormat::Rgb565, DataLayout::Twiddled, 4, 4)));
+    const auto twiddled = spice::pvm::decoding::decodePvrTexture(twiddledTexture);
+    ASSERT_EQ(twiddled.status, ParseStatus::Complete);
+    EXPECT_NE(pixelAt(twiddled.mipLevels[0].image, 1, 0), pixelAt(twiddled.mipLevels[0].image, 0, 1));
+
+    auto payload = vqPayload(PixelFormat::Rgb565, 2, false, false);
+    const auto vq = spice::pvm::decoding::decodePvrTexture(
+        spice::pvm::parsing::parsePvrTexture(
+            makePvr(PixelFormat::Rgb565, DataLayout::Vq, 2, 2, payload)));
+    ASSERT_EQ(vq.status, ParseStatus::Complete);
+    EXPECT_NE(pixelAt(vq.mipLevels[0].image, 0, 1), pixelAt(vq.mipLevels[0].image, 1, 0));
+}
+
+TEST(SpicePvmDecoder, RejectsInvalidCombinationsAndPayloads)
+{
+    const auto nonsquare = spice::pvm::parsing::parsePvrTexture(
+        makePvr(PixelFormat::Rgb565, DataLayout::Twiddled, 4, 2, std::vector<std::uint8_t>(16)));
+    EXPECT_EQ(spice::pvm::decoding::decodePvrTexture(nonsquare).status, ParseStatus::Failed);
+
+    auto shortPayload = payloadFor(PixelFormat::Rgb565, DataLayout::Vq, 4, 4);
+    shortPayload.pop_back();
+    const auto truncated = spice::pvm::parsing::parsePvrTexture(
+        makePvr(PixelFormat::Rgb565, DataLayout::Vq, 4, 4, shortPayload));
+    EXPECT_EQ(spice::pvm::decoding::decodePvrTexture(truncated).status, ParseStatus::Failed);
+
+    auto invalidIndex = payloadFor(PixelFormat::Rgb565, DataLayout::SmallVq, 16, 16);
+    invalidIndex[16 * 8] = 0xFF;
+    const auto badIndex = spice::pvm::parsing::parsePvrTexture(
+        makePvr(PixelFormat::Rgb565, DataLayout::SmallVq, 16, 16, invalidIndex));
+    EXPECT_EQ(spice::pvm::decoding::decodePvrTexture(badIndex).status, ParseStatus::Failed);
+
+    auto extra = payloadFor(PixelFormat::Rgb565, DataLayout::TwiddledMipmaps, 4, 4);
+    extra.push_back(0);
+    const auto inconsistent = spice::pvm::parsing::parsePvrTexture(
+        makePvr(PixelFormat::Rgb565, DataLayout::TwiddledMipmaps, 4, 4, extra));
+    EXPECT_EQ(spice::pvm::decoding::decodePvrTexture(inconsistent).status, ParseStatus::Failed);
+}
+
+TEST(SpicePvmDecoder, RetainsZeroFilledThirtyTwoByteChunkAlignment)
+{
+    auto payload = payloadFor(PixelFormat::Rgb565, DataLayout::VqMipmaps, 4, 4);
+    const auto logicalSize = payload.size();
+    payload.resize((payload.size() + 31) & ~std::size_t{31}, 0);
+    const auto decoded = spice::pvm::decoding::decodePvrTexture(
+        spice::pvm::parsing::parsePvrTexture(
+            makePvr(PixelFormat::Rgb565, DataLayout::VqMipmaps, 4, 4, payload)));
+    ASSERT_EQ(decoded.status, ParseStatus::Complete);
+    ASSERT_TRUE(decoded.trailingPaddingRange.has_value());
+    EXPECT_EQ(decoded.trailingPaddingRange->size, payload.size() - logicalSize);
+
+    payload.back() = 1;
+    EXPECT_EQ(spice::pvm::decoding::decodePvrTexture(
+        spice::pvm::parsing::parsePvrTexture(
+            makePvr(PixelFormat::Rgb565, DataLayout::VqMipmaps, 4, 4, payload))).status,
+        ParseStatus::Failed);
+}
+
+struct CorpusResult {
+    std::size_t files = 0;
+    std::size_t textures = 0;
+    std::size_t decoded = 0;
+    std::uint64_t basePixelHash = 1469598103934665603ULL;
+    std::uint64_t allMipPixelHash = 1469598103934665603ULL;
+    std::uint64_t basePixelCount = 0;
+    std::uint64_t allMipPixelCount = 0;
+    std::map<std::uint8_t, std::size_t> pixels;
+    std::map<std::uint8_t, std::size_t> layouts;
+};
+
+void hashBytes(std::uint64_t& hash, const std::vector<std::uint8_t>& bytes)
+{
+    for (const auto byte : bytes) {
+        hash ^= byte;
+        hash *= 1099511628211ULL;
+    }
+}
+
+std::vector<std::uint8_t> readAllBytes(const std::filesystem::path& path)
+{
+    std::ifstream input(path, std::ios::binary);
+    input.seekg(0, std::ios::end);
+    const auto length = input.tellg();
+    input.seekg(0, std::ios::beg);
+    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(length));
+    if (!bytes.empty())
+        input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    return bytes;
+}
+
+std::vector<std::filesystem::path> corpusSources(const std::filesystem::path& root)
+{
+    std::vector<std::filesystem::path> sources;
+    for (const auto* directory : {"BATTLE", "BCHARA", "TITLE", "BEFF"}) {
+        const auto path = root / directory;
+        for (const auto& item : std::filesystem::recursive_directory_iterator(path)) {
+            if (item.is_regular_file() && item.path().extension() == ".MLD")
+                sources.push_back(item.path());
+        }
+    }
+    for (const auto& item : std::filesystem::recursive_directory_iterator(root)) {
+        if (!item.is_regular_file())
+            continue;
+        auto extension = item.path().extension().string();
+        std::ranges::transform(extension, extension.begin(), [](const unsigned char value) {
+            return static_cast<char>(std::tolower(value));
+        });
+        if (extension == ".pvr" || extension == ".pvm")
+            sources.push_back(item.path());
+    }
+    std::ranges::sort(sources, [&](const auto& left, const auto& right) {
+        return left.lexically_relative(root).generic_string() < right.lexically_relative(root).generic_string();
+    });
+    return sources;
+}
+
+CorpusResult validateCorpus(const std::filesystem::path& root)
+{
+    CorpusResult result;
+    const auto sources = corpusSources(root);
+    result.files = sources.size();
+    for (const auto& source : sources) {
+        const auto bytes = readAllBytes(source);
+        const auto scan = spice::pvm::parsing::scanPvrTextures(bytes);
+        if (scan.textures.empty()) {
+            ADD_FAILURE() << "No PVR texture found in " << source.string();
+            continue;
+        }
+        for (const auto& texture : scan.textures) {
+            ++result.textures;
+            ++result.pixels[texture.rawPixelFormat];
+            ++result.layouts[texture.rawDataLayout];
+            if (texture.pixelFormat == PixelFormat::Unknown || texture.dataLayout == DataLayout::Unknown) {
+                ADD_FAILURE() << "Unsupported tuple 0x" << std::hex
+                    << static_cast<unsigned>(texture.rawPixelFormat) << "/0x"
+                    << static_cast<unsigned>(texture.rawDataLayout) << std::dec
+                    << " in " << source.string() << " at " << texture.sourceRange.offset;
+                continue;
+            }
+            const auto decoded = spice::pvm::decoding::decodePvrTexture(texture);
+            if (decoded.status != ParseStatus::Complete) {
+                ADD_FAILURE() << "Decode failed for " << source.string()
+                    << " at " << texture.sourceRange.offset
+                    << (decoded.diagnostics.empty() ? "" : ": " + decoded.diagnostics.front().message);
+                continue;
+            }
+            ++result.decoded;
+            const auto& base = decoded.mipLevels.front().image;
+            hashBytes(result.basePixelHash, base.pixels);
+            result.basePixelCount += static_cast<std::uint64_t>(base.width) * base.height;
+            for (const auto& level : decoded.mipLevels) {
+                hashBytes(result.allMipPixelHash, level.image.pixels);
+                result.allMipPixelCount += static_cast<std::uint64_t>(level.width) * level.height;
+            }
+        }
+    }
+    return result;
+}
+
+void printCorpusResult(const char* label, const CorpusResult& result)
+{
+    std::cout << label << " files=" << result.files
+        << " textures=" << result.textures
+        << " decoded=" << result.decoded
+        << " base_pixels=" << result.basePixelCount
+        << " all_mip_pixels=" << result.allMipPixelCount
+        << " base_fnv1a64=0x" << std::hex << std::setw(16) << std::setfill('0') << result.basePixelHash
+        << " all_mip_fnv1a64=0x" << std::setw(16) << result.allMipPixelHash
+        << std::dec << std::setfill(' ') << '\n';
+}
+
+TEST(SpicePvmCorpus, DecodesRepresentativeEuAndUsDreamcastSourcesReadOnly)
+{
+    const std::filesystem::path euRoot = R"(D:\SoADC\SoA(Eu)Disc1Assets)";
+    const std::filesystem::path usRoot = R"(D:\SoADC\SoA(Usa)Disc1Assets)";
+    if (!std::filesystem::exists(euRoot) || !std::filesystem::exists(usRoot))
+        GTEST_SKIP() << "Dreamcast corpus roots are not available on this machine";
+
+    const auto eu = validateCorpus(euRoot);
+    printCorpusResult("EU", eu);
+    EXPECT_EQ(eu.files, 318U);
+    EXPECT_EQ(eu.textures, 2721U);
+    EXPECT_EQ(eu.decoded, 2721U);
+    EXPECT_EQ(eu.pixels.at(0x00), 412U);
+    EXPECT_EQ(eu.pixels.at(0x01), 1748U);
+    EXPECT_EQ(eu.pixels.at(0x02), 561U);
+    EXPECT_EQ(eu.layouts.at(0x01), 296U);
+    EXPECT_EQ(eu.layouts.at(0x02), 6U);
+    EXPECT_EQ(eu.layouts.at(0x03), 360U);
+    EXPECT_EQ(eu.layouts.at(0x04), 1898U);
+    EXPECT_EQ(eu.layouts.at(0x09), 10U);
+    EXPECT_EQ(eu.layouts.at(0x10), 74U);
+    EXPECT_EQ(eu.layouts.at(0x11), 76U);
+    EXPECT_EQ(eu.layouts.at(0x12), 1U);
+
+    const auto us = validateCorpus(usRoot);
+    printCorpusResult("US", us);
+    EXPECT_EQ(us.files, 294U);
+    EXPECT_GT(us.textures, 0U);
+    EXPECT_EQ(us.decoded, us.textures);
+}
+
+} // namespace
