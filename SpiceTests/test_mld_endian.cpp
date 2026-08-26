@@ -2,6 +2,7 @@
 #include "../SpiceMLD/Parsing/GobjParser.h"
 #include "../SpiceMLD/Parsing/GrndParser.h"
 #include "../SpiceGvm/SpiceGvm.h"
+#include "../SpicePvm/SpicePvm.h"
 #include "../Compression/Aklz.h"
 
 #include <gtest/gtest.h>
@@ -10,6 +11,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <span>
 #include <string>
 #include <utility>
@@ -381,6 +383,60 @@ std::vector<std::uint8_t> makeTexturedMld(
     return bytes;
 }
 
+spice::pvm::model::RgbaImage makePvrImage(
+    const std::uint32_t width, const std::uint32_t height, const std::uint8_t bias = 0U) {
+    spice::pvm::model::RgbaImage image{};
+    image.width = width;
+    image.height = height;
+    image.pixels.resize(static_cast<std::size_t>(width) * height * 4U);
+    for (std::uint32_t y = 0; y < height; ++y) {
+        for (std::uint32_t x = 0; x < width; ++x) {
+            const auto offset = (static_cast<std::size_t>(y) * width + x) * 4U;
+            image.pixels[offset + 0U] = static_cast<std::uint8_t>(x * 17U + bias);
+            image.pixels[offset + 1U] = static_cast<std::uint8_t>(y * 19U + bias);
+            image.pixels[offset + 2U] = static_cast<std::uint8_t>((x + y) * 13U + bias);
+            image.pixels[offset + 3U] = 0xFFU;
+        }
+    }
+    return image;
+}
+
+std::vector<std::uint8_t> encodePvrTexture(
+    const std::uint32_t size, const std::uint32_t globalIndex, const std::uint8_t bias = 0U) {
+    spice::pvm::encoding::PvrEncodeOptions options{};
+    options.pixelFormat = spice::pvm::model::PixelFormat::Rgb565;
+    options.dataLayout = spice::pvm::model::DataLayout::Twiddled;
+    options.includeGlobalIndex = true;
+    options.globalIndex = globalIndex;
+    const auto result = spice::pvm::encoding::encodePvrTexture(makePvrImage(size, size, bias), options);
+    EXPECT_TRUE(result.ok());
+    return result.bytes;
+}
+
+std::vector<std::uint8_t> makeDreamcastTexturedMld(
+    const std::vector<std::vector<std::uint8_t>>& textures,
+    const bool alignTextures) {
+    auto bytes = makeMinimalMld(Endian::Little);
+    bytes.resize(kTextureTable);
+    appendU32(bytes, static_cast<std::uint32_t>(textures.size()), Endian::Little);
+    for (std::size_t i = 0; i < textures.size(); ++i)
+        appendNameRecord(bytes, "dc_tex_" + std::to_string(i));
+
+    for (std::size_t i = 0; i < textures.size(); ++i) {
+        const auto record = kTextureTable + 4U + i * 44U;
+        const auto blockStart = bytes.size();
+        const auto prefixSize = alignTextures ? ((32U - (blockStart & 31U)) & 31U) : 0U;
+        if (alignTextures) {
+            writeU32(bytes, record + 36U, 0x80000000U, Endian::Little);
+            bytes.resize(bytes.size() + prefixSize, 0xCCU);
+        }
+        bytes.insert(bytes.end(), textures[i].begin(), textures[i].end());
+        writeU32(bytes, record + 40U,
+            static_cast<std::uint32_t>(textures[i].size()), Endian::Little);
+    }
+    return bytes;
+}
+
 } // namespace
 
 TEST(MldEndian, ParsesBigAndLittleEndianFixturesToEquivalentIr) {
@@ -708,7 +764,7 @@ TEST(MldTextureArchiveRebuild, ReplacesWithLargerTextureAndPreservesNames) {
     options.platform = TargetPlatform::GameCube;
     options.textureReplacement = spice::mld::exporting::MldTextureReplacement{
         .textureIndex = 0U,
-        .gvrData = replacement,
+        .encodedData = replacement,
     };
 
     const auto rebuilt = MldFileExporter{}.exportFile(parsed, options);
@@ -719,8 +775,8 @@ TEST(MldTextureArchiveRebuild, ReplacesWithLargerTextureAndPreservesNames) {
     ASSERT_EQ(reparsed.textureArchive->entries.size(), 2U);
     EXPECT_EQ(reparsed.textureArchive->entries[0].textureName, "tex_a");
     EXPECT_EQ(reparsed.textureArchive->entries[1].textureName, "tex_b");
-    EXPECT_EQ(reparsed.textureArchive->entries[0].gvrDataSize, replacement.size());
-    EXPECT_EQ(reparsed.textureArchive->entries[1].gvrDataSize, second.size());
+    EXPECT_EQ(reparsed.textureArchive->entries[0].encodedDataSize, replacement.size());
+    EXPECT_EQ(reparsed.textureArchive->entries[1].encodedDataSize, second.size());
     EXPECT_EQ(reparsed.textureArchive->entries[0].sourceFormat, "RGBA8");
     EXPECT_EQ(reparsed.textureArchive->archivePrefixBytes, parsed.textureArchive->archivePrefixBytes);
 }
@@ -734,7 +790,7 @@ TEST(MldCanonicalTextureWriter, RebuildsEditedTextureArchiveFromCanonicalFile) {
     auto file = MldParser{}.parseBytes(makeTexturedMld(small, second));
     ASSERT_TRUE(file.textureArchive.has_value());
     ASSERT_EQ(file.textureArchive->entries.size(), 2U);
-    file.textureArchive->entries[0].gvrData = replacement;
+    file.textureArchive->entries[0].encodedData = replacement;
 
     const auto written = MldFileWriter{}.write(file);
     ASSERT_TRUE(written.ok());
@@ -742,9 +798,9 @@ TEST(MldCanonicalTextureWriter, RebuildsEditedTextureArchiveFromCanonicalFile) {
     ASSERT_TRUE(reparsed.textureArchive.has_value());
     ASSERT_EQ(reparsed.textureArchive->entries.size(), 2U);
     EXPECT_EQ(reparsed.textureArchive->entries[0].textureName, "tex_a");
-    EXPECT_EQ(reparsed.textureArchive->entries[0].gvrData, replacement);
+    EXPECT_EQ(reparsed.textureArchive->entries[0].encodedData, replacement);
     EXPECT_EQ(reparsed.textureArchive->entries[1].textureName, "tex_b");
-    EXPECT_EQ(reparsed.textureArchive->entries[1].gvrData, second);
+    EXPECT_EQ(reparsed.textureArchive->entries[1].encodedData, second);
 }
 
 TEST(MldCanonicalTextureWriter, RebuildsNameTableWhenAddingTextureEntry) {
@@ -757,7 +813,7 @@ TEST(MldCanonicalTextureWriter, RebuildsNameTableWhenAddingTextureEntry) {
     auto addedEntry = file.textureArchive->entries.front();
     addedEntry.archiveTextureIndex = 2U;
     addedEntry.textureName = "tex_c";
-    addedEntry.gvrData = added;
+    addedEntry.encodedData = added;
     file.textureArchive->entries.push_back(std::move(addedEntry));
 
     const auto written = MldFileWriter{}.write(file);
@@ -766,7 +822,148 @@ TEST(MldCanonicalTextureWriter, RebuildsNameTableWhenAddingTextureEntry) {
     ASSERT_TRUE(reparsed.textureArchive.has_value());
     ASSERT_EQ(reparsed.textureArchive->entries.size(), 3U);
     EXPECT_EQ(reparsed.textureArchive->entries[2].textureName, "tex_c");
-    EXPECT_EQ(reparsed.textureArchive->entries[2].gvrData, added);
+    EXPECT_EQ(reparsed.textureArchive->entries[2].encodedData, added);
+}
+
+TEST(MldDreamcastTextureArchive, ParsesPvrRecordsAndPreservesNoEditBytes) {
+    const auto first = encodePvrTexture(8U, 41U, 3U);
+    const auto second = encodePvrTexture(8U, 42U, 9U);
+    const auto original = makeDreamcastTexturedMld({first, second}, true);
+
+    const auto file = MldParser{}.parseBytes(original);
+    ASSERT_EQ(file.sourcePlatform, TargetPlatform::Dreamcast);
+    ASSERT_TRUE(file.textureArchive.has_value());
+    ASSERT_EQ(file.textureArchive->entries.size(), 2U);
+    const auto& firstEntry = file.textureArchive->entries[0];
+    EXPECT_EQ(firstEntry.encoding, spice::mld::model::MldTextureEncoding::Pvr);
+    EXPECT_EQ(firstEntry.textureName, "dc_tex_0");
+    EXPECT_EQ(firstEntry.encodedData, first);
+    EXPECT_EQ(firstEntry.rawRecordWord1, 0x80000000U);
+    EXPECT_EQ(firstEntry.declaredBlockSize, firstEntry.encodedData.size());
+    EXPECT_TRUE(firstEntry.decoded);
+    EXPECT_EQ(firstEntry.globalIndex, 41U);
+    EXPECT_EQ(firstEntry.encodedDataOffset & 31U, 0U);
+
+    const auto written = MldFileWriter{}.write(file);
+    ASSERT_TRUE(written.ok());
+    EXPECT_EQ(written.bytes, original);
+}
+
+TEST(MldDreamcastTextureArchive, ReplacesRelocatesAndRewritesDeclaredBlockSizes) {
+    const auto first = encodePvrTexture(8U, 51U, 3U);
+    const auto second = encodePvrTexture(8U, 52U, 9U);
+    auto file = MldParser{}.parseBytes(makeDreamcastTexturedMld({first, second}, true));
+    ASSERT_TRUE(file.textureArchive.has_value());
+
+    const auto replacement = encodePvrTexture(16U, 151U, 17U);
+    file.textureArchive->entries[0].encodedData = replacement;
+    const auto written = MldFileWriter{}.write(file);
+    ASSERT_TRUE(written.ok()) << (written.diagnostics.empty() ? "" : written.diagnostics.front().message);
+    const auto reparsed = MldParser{}.parseBytes(written.bytes);
+    ASSERT_TRUE(reparsed.textureArchive.has_value());
+    ASSERT_EQ(reparsed.textureArchive->entries.size(), 2U);
+    const auto& replaced = reparsed.textureArchive->entries[0];
+    EXPECT_EQ(replaced.encodedData, replacement);
+    EXPECT_EQ(replaced.globalIndex, 151U);
+    EXPECT_EQ(replaced.encodedDataOffset & 31U, 0U);
+    EXPECT_EQ(replaced.declaredBlockSize,
+        replaced.encodedData.size() + replaced.trailingBlockBytes.size());
+    EXPECT_EQ(reparsed.textureArchive->entries[1].encodedData, second);
+    EXPECT_EQ(reparsed.header.textureTableOffset, reparsed.textureArchive->tableOffset);
+}
+
+TEST(MldDreamcastTextureArchive, AddsAndRemovesPvrRecordsCanonically) {
+    const auto first = encodePvrTexture(8U, 61U, 3U);
+    const auto second = encodePvrTexture(8U, 62U, 9U);
+    auto file = MldParser{}.parseBytes(makeDreamcastTexturedMld({first, second}, false));
+    ASSERT_TRUE(file.textureArchive.has_value());
+
+    auto added = file.textureArchive->entries.front();
+    added.archiveTextureIndex = 2U;
+    added.textureName = "dc_tex_2";
+    added.encodedData = encodePvrTexture(8U, 63U, 15U);
+    added.encodedDataSize = added.encodedData.size();
+    added.rawRecordWord1 = 0x80000000U;
+    added.alignmentPrefixBytes.clear();
+    added.trailingBlockBytes.clear();
+    file.textureArchive->entries.push_back(std::move(added));
+
+    auto written = MldFileWriter{}.write(file);
+    ASSERT_TRUE(written.ok());
+    auto reparsed = MldParser{}.parseBytes(written.bytes);
+    ASSERT_TRUE(reparsed.textureArchive.has_value());
+    ASSERT_EQ(reparsed.textureArchive->entries.size(), 3U);
+    EXPECT_EQ(reparsed.textureArchive->entries[2].textureName, "dc_tex_2");
+    EXPECT_EQ(reparsed.textureArchive->entries[2].globalIndex, 63U);
+    EXPECT_EQ(reparsed.textureArchive->entries[2].encodedDataOffset & 31U, 0U);
+
+    reparsed.textureArchive->entries.erase(reparsed.textureArchive->entries.begin() + 1);
+    written = MldFileWriter{}.write(reparsed);
+    ASSERT_TRUE(written.ok());
+    const auto removed = MldParser{}.parseBytes(written.bytes);
+    ASSERT_TRUE(removed.textureArchive.has_value());
+    ASSERT_EQ(removed.textureArchive->entries.size(), 2U);
+    EXPECT_EQ(removed.textureArchive->entries[1].textureName, "dc_tex_2");
+    EXPECT_EQ(removed.textureArchive->entries[1].globalIndex, 63U);
+}
+
+TEST(MldDreamcastTextureArchive, RejectsInvalidOrCrossPlatformEncodedTextureBytes) {
+    const auto pvr = encodePvrTexture(8U, 71U, 3U);
+    auto file = MldParser{}.parseBytes(makeDreamcastTexturedMld({pvr}, false));
+    ASSERT_TRUE(file.textureArchive.has_value());
+    file.textureArchive->entries[0].encodedData = {'N', 'O', 'P', 'E'};
+    EXPECT_FALSE(MldFileWriter{}.write(file).ok());
+
+    file = MldParser{}.parseBytes(makeDreamcastTexturedMld({pvr}, false));
+    spice::mld::exporting::MldWriteOptions options{};
+    options.platform = TargetPlatform::GameCube;
+    EXPECT_FALSE(MldFileWriter{}.write(file, options).ok());
+}
+
+TEST(MldDreamcastTextureCorpus, ParsesAndNoEditWritesRegionalMldArchivesReadOnly) {
+    const std::array roots{
+        std::filesystem::path{R"(D:\SoADC\SoA(Eu)Disc1Assets)"},
+        std::filesystem::path{R"(D:\SoADC\SoA(Usa)Disc1Assets)"},
+    };
+    if (!std::filesystem::exists(roots[0]) || !std::filesystem::exists(roots[1]))
+        GTEST_SKIP() << "Dreamcast corpus roots are not available on this machine";
+
+    std::size_t archives = 0U;
+    std::size_t textures = 0U;
+    for (const auto& root : roots) {
+        for (const auto* directory : {"BATTLE", "BCHARA", "TITLE", "BEFF"}) {
+            const auto path = root / directory;
+            for (const auto& item : std::filesystem::recursive_directory_iterator(path)) {
+                if (!item.is_regular_file() || item.path().extension() != ".MLD")
+                    continue;
+                std::ifstream input(item.path(), std::ios::binary);
+                input.seekg(0, std::ios::end);
+                const auto length = input.tellg();
+                input.seekg(0, std::ios::beg);
+                std::vector<std::uint8_t> bytes(static_cast<std::size_t>(length));
+                if (!bytes.empty())
+                    input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+
+                const auto file = MldParser{}.parseBytes(bytes);
+                if (!file.textureArchive.has_value() || file.textureArchive->entries.empty())
+                    continue;
+                ++archives;
+                for (const auto& entry : file.textureArchive->entries) {
+                    EXPECT_EQ(entry.encoding, spice::mld::model::MldTextureEncoding::Pvr)
+                        << item.path().string();
+                    ASSERT_FALSE(entry.encodedData.empty()) << item.path().string() << " diagnostic="
+                        << (entry.diagnostics.empty() ? "none" : entry.diagnostics.front());
+                    ++textures;
+                }
+                const auto written = MldFileWriter{}.write(file);
+                ASSERT_TRUE(written.ok()) << item.path().string();
+                EXPECT_EQ(written.bytes, bytes) << item.path().string();
+            }
+        }
+    }
+    EXPECT_GT(archives, 0U);
+    EXPECT_GT(textures, 0U);
+    std::cout << "Dreamcast MLD texture archives=" << archives << " textures=" << textures << '\n';
 }
 
 TEST(MldTextureArchiveRebuild, PreservesExactTextureGvrPayloadsForExtraction) {
@@ -782,12 +979,12 @@ TEST(MldTextureArchiveRebuild, PreservesExactTextureGvrPayloadsForExtraction) {
     const auto& secondEntry = parsed.textureArchive->entries[1];
     EXPECT_EQ(firstEntry.archiveTextureIndex, 0U);
     EXPECT_EQ(firstEntry.textureName, "tex_a");
-    EXPECT_EQ(firstEntry.gvrDataSize, first.size());
-    EXPECT_EQ(firstEntry.gvrData, first);
+    EXPECT_EQ(firstEntry.encodedDataSize, first.size());
+    EXPECT_EQ(firstEntry.encodedData, first);
     EXPECT_EQ(secondEntry.archiveTextureIndex, 1U);
     EXPECT_EQ(secondEntry.textureName, "tex_b");
-    EXPECT_EQ(secondEntry.gvrDataSize, second.size());
-    EXPECT_EQ(secondEntry.gvrData, second);
+    EXPECT_EQ(secondEntry.encodedDataSize, second.size());
+    EXPECT_EQ(secondEntry.encodedData, second);
 }
 
 TEST(MldTextureArchiveRebuild, ExtractedTextureGvrPayloadDecodesToPng) {
@@ -804,7 +1001,7 @@ TEST(MldTextureArchiveRebuild, ExtractedTextureGvrPayloadDecodesToPng) {
     const auto& firstEntry = parsed.textureArchive->entries[0];
     const auto pngPath = dir / "tex_a.png";
     const auto exported = spice::gvm::ir::exportGvrPng(
-        std::span<const std::uint8_t>(firstEntry.gvrData.data(), firstEntry.gvrData.size()),
+        std::span<const std::uint8_t>(firstEntry.encodedData.data(), firstEntry.encodedData.size()),
         pngPath);
     const auto decoded = spice::gvm::image::readPngRgba8(pngPath);
 
@@ -829,7 +1026,7 @@ TEST(MldTextureArchiveRebuild, ReplacesWithSmallerTextureWithoutPadding) {
     options.platform = TargetPlatform::GameCube;
     options.textureReplacement = spice::mld::exporting::MldTextureReplacement{
         .textureIndex = 0U,
-        .gvrData = replacement,
+        .encodedData = replacement,
     };
 
     const auto rebuilt = MldFileExporter{}.exportFile(parsed, options);
@@ -838,8 +1035,8 @@ TEST(MldTextureArchiveRebuild, ReplacesWithSmallerTextureWithoutPadding) {
     const auto reparsed = parser.parseFile(rebuilt);
     ASSERT_TRUE(reparsed.textureArchive.has_value());
     ASSERT_EQ(reparsed.textureArchive->entries.size(), 2U);
-    EXPECT_EQ(reparsed.textureArchive->entries[0].gvrDataSize, replacement.size());
-    EXPECT_EQ(reparsed.textureArchive->entries[1].gvrDataSize, second.size());
+    EXPECT_EQ(reparsed.textureArchive->entries[0].encodedDataSize, replacement.size());
+    EXPECT_EQ(reparsed.textureArchive->entries[1].encodedDataSize, second.size());
     EXPECT_EQ(reparsed.textureArchive->entries[0].sourceFormat, "I4");
 }
 
@@ -856,7 +1053,7 @@ TEST(MldTextureArchiveRebuild, RejectsNonTerminalArchiveSizeShiftByDefault) {
     options.platform = TargetPlatform::GameCube;
     options.textureReplacement = spice::mld::exporting::MldTextureReplacement{
         .textureIndex = 0U,
-        .gvrData = replacement,
+        .encodedData = replacement,
     };
 
     EXPECT_THROW((void)MldFileExporter{}.exportFile(parsed, options), std::runtime_error);
@@ -886,7 +1083,7 @@ TEST(MldTextureArchiveRebuild, PreservesAklzWrappingByDefaultWhenCompressed) {
     options.compressAklz = parsed.sourceWasCompressedAklz;
     options.textureReplacement = spice::mld::exporting::MldTextureReplacement{
         .textureIndex = 0U,
-        .gvrData = replacement,
+        .encodedData = replacement,
     };
 
     const auto rebuilt = MldFileExporter{}.exportFile(parsed, options);
@@ -895,7 +1092,7 @@ TEST(MldTextureArchiveRebuild, PreservesAklzWrappingByDefaultWhenCompressed) {
     ASSERT_TRUE(decoded.ok()) << spice::compression::aklz::errorToString(decoded.error);
     const auto reparsed = parser.parseFile(decoded.bytes);
     ASSERT_TRUE(reparsed.textureArchive.has_value());
-    EXPECT_EQ(reparsed.textureArchive->entries[0].gvrDataSize, replacement.size());
+    EXPECT_EQ(reparsed.textureArchive->entries[0].encodedDataSize, replacement.size());
 }
 
 TEST(GobjParser, DecodesPositionOnlyVertexChunk22) {

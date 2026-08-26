@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cctype>
 #include <cstdint>
 #include <filesystem>
@@ -495,6 +496,141 @@ TEST(SpicePvmDecoder, RetainsZeroFilledThirtyTwoByteChunkAlignment)
         spice::pvm::parsing::parsePvrTexture(
             makePvr(PixelFormat::Rgb565, DataLayout::VqMipmaps, 4, 4, payload))).status,
         ParseStatus::Failed);
+}
+
+spice::pvm::model::RgbaImage makeEncodeImage(
+    const std::uint32_t width, const std::uint32_t height, const std::uint8_t bias = 0U)
+{
+    spice::pvm::model::RgbaImage image;
+    image.width = width;
+    image.height = height;
+    image.pixels.resize(static_cast<std::size_t>(width) * height * 4U);
+    for (std::uint32_t y = 0; y < height; ++y) {
+        for (std::uint32_t x = 0; x < width; ++x) {
+            const auto offset = (static_cast<std::size_t>(y) * width + x) * 4U;
+            image.pixels[offset + 0U] = static_cast<std::uint8_t>((x % 4U) * 61U + bias);
+            image.pixels[offset + 1U] = static_cast<std::uint8_t>((y % 4U) * 47U + bias);
+            image.pixels[offset + 2U] = static_cast<std::uint8_t>(((x + y) % 4U) * 53U + bias);
+            image.pixels[offset + 3U] = static_cast<std::uint8_t>(((x ^ y) & 1U) != 0 ? 255U : 96U);
+        }
+    }
+    return image;
+}
+
+TEST(SpicePvmEncoder, RoundTripsEveryPromotedPixelFormatAndLayoutDeterministically)
+{
+    const std::array formats{PixelFormat::Argb1555, PixelFormat::Rgb565, PixelFormat::Argb4444};
+    const std::array layouts{
+        DataLayout::Twiddled, DataLayout::TwiddledMipmaps, DataLayout::Vq,
+        DataLayout::VqMipmaps, DataLayout::Rectangle, DataLayout::SmallVq,
+        DataLayout::SmallVqMipmaps, DataLayout::TwiddledMipmapsDma,
+    };
+    for (const auto format : formats) {
+        for (const auto layout : layouts) {
+            const bool smallVq = layout == DataLayout::SmallVq || layout == DataLayout::SmallVqMipmaps;
+            const bool rectangle = layout == DataLayout::Rectangle;
+            const auto width = smallVq ? 16U : 4U;
+            const auto height = rectangle ? 2U : width;
+            spice::pvm::encoding::PvrEncodeOptions options{};
+            options.pixelFormat = format;
+            options.dataLayout = layout;
+            options.generateMipmaps = layout == DataLayout::TwiddledMipmaps ||
+                layout == DataLayout::VqMipmaps || layout == DataLayout::SmallVqMipmaps ||
+                layout == DataLayout::TwiddledMipmapsDma;
+            options.includeGlobalIndex = true;
+            options.globalIndex = 0x12340000U | static_cast<std::uint8_t>(layout);
+            options.pvrtUnknownHeader = {0xA5U, 0x5AU};
+
+            const auto image = makeEncodeImage(width, height, static_cast<std::uint8_t>(format));
+            const auto first = spice::pvm::encoding::encodePvrTexture(image, options);
+            const auto second = spice::pvm::encoding::encodePvrTexture(image, options);
+            ASSERT_TRUE(first.ok()) << static_cast<unsigned>(format) << "/" << static_cast<unsigned>(layout);
+            EXPECT_EQ(first.bytes, second.bytes);
+            const auto parsed = spice::pvm::parsing::parsePvrTexture(first.bytes);
+            ASSERT_EQ(parsed.status, ParseStatus::Complete);
+            EXPECT_EQ(parsed.pixelFormat, format);
+            EXPECT_EQ(parsed.dataLayout, layout);
+            EXPECT_EQ(parsed.globalIndex, options.globalIndex);
+            EXPECT_EQ(parsed.pvrtUnknownHeader, (std::vector<std::uint8_t>{0xA5U, 0x5AU}));
+            const auto decoded = spice::pvm::decoding::decodePvrTexture(parsed);
+            ASSERT_EQ(decoded.status, ParseStatus::Complete)
+                << (decoded.diagnostics.empty() ? "" : decoded.diagnostics.front().message);
+            ASSERT_FALSE(decoded.mipLevels.empty());
+            EXPECT_EQ(decoded.mipLevels.front().width, width);
+            EXPECT_EQ(decoded.mipLevels.front().height, height);
+            EXPECT_EQ(decoded.mipLevels.size(), first.mipSourceRanges.size());
+        }
+    }
+}
+
+TEST(SpicePvmEncoder, SupportsAllSmallVqSdkDimensionsAndExplicitMipChains)
+{
+    for (const auto size : {16U, 32U, 64U}) {
+        spice::pvm::encoding::PvrEncodeOptions options{};
+        options.pixelFormat = PixelFormat::Rgb565;
+        options.dataLayout = DataLayout::SmallVqMipmaps;
+        options.generateMipmaps = true;
+        const auto encoded = spice::pvm::encoding::encodePvrTexture(makeEncodeImage(size, size), options);
+        ASSERT_TRUE(encoded.ok()) << size;
+        const auto decoded = spice::pvm::decoding::decodePvrTexture(
+            spice::pvm::parsing::parsePvrTexture(encoded.bytes));
+        ASSERT_EQ(decoded.status, ParseStatus::Complete) << size;
+        EXPECT_EQ(decoded.mipLevels.size(), std::bit_width(size));
+        EXPECT_EQ(decoded.mipLevels.front().width, size);
+        EXPECT_EQ(decoded.mipLevels.back().width, 1U);
+    }
+
+    std::vector<spice::pvm::model::RgbaImage> levels;
+    for (std::uint32_t size = 8U;; size /= 2U) {
+        levels.push_back(makeEncodeImage(size, size, static_cast<std::uint8_t>(size)));
+        if (size == 1U) break;
+    }
+    spice::pvm::encoding::PvrEncodeOptions options{};
+    options.pixelFormat = PixelFormat::Argb4444;
+    options.dataLayout = DataLayout::TwiddledMipmapsDma;
+    const auto encoded = spice::pvm::encoding::encodePvrTexture(levels, options);
+    ASSERT_TRUE(encoded.ok());
+    ASSERT_EQ(encoded.mipSourceRanges.size(), levels.size());
+    EXPECT_EQ(encoded.mipSourceRanges.front().size, 8U * 8U * 2U);
+    EXPECT_EQ(encoded.mipSourceRanges.back().offset, encoded.textureDataRange.offset + 6U);
+}
+
+TEST(SpicePvmEncoder, BuildsFormalPvmArchiveAndDiagnosesInvalidRequests)
+{
+    spice::pvm::encoding::PvrEncodeOptions pvrOptions{};
+    pvrOptions.pixelFormat = PixelFormat::Rgb565;
+    pvrOptions.dataLayout = DataLayout::Twiddled;
+    pvrOptions.includeGlobalIndex = true;
+    pvrOptions.globalIndex = 100U;
+    const auto first = spice::pvm::encoding::encodePvrTexture(makeEncodeImage(4U, 4U), pvrOptions);
+    pvrOptions.globalIndex = 101U;
+    const auto second = spice::pvm::encoding::encodePvrTexture(makeEncodeImage(4U, 4U, 7U), pvrOptions);
+    ASSERT_TRUE(first.ok());
+    ASSERT_TRUE(second.ok());
+
+    const std::array entries{
+        spice::pvm::encoding::PvmEncodeEntry{.archiveIndex = 0U, .name = "first", .pvrBytes = first.bytes},
+        spice::pvm::encoding::PvmEncodeEntry{.archiveIndex = 1U, .name = "second", .pvrBytes = second.bytes},
+    };
+    spice::pvm::encoding::PvmEncodeOptions archiveOptions{};
+    archiveOptions.headerPadding = {0xCCU, 0xDDU};
+    archiveOptions.interstitialMetadata = {'M', 'E', 'T', 'A'};
+    const auto encoded = spice::pvm::encoding::encodePvmArchive(entries, archiveOptions);
+    ASSERT_TRUE(encoded.ok());
+    const auto parsed = spice::pvm::parsing::parsePvmArchive(encoded.bytes);
+    ASSERT_EQ(parsed.status, ParseStatus::Complete);
+    ASSERT_EQ(parsed.entries.size(), 2U);
+    EXPECT_EQ(parsed.entries[0].name, "first");
+    EXPECT_EQ(parsed.entries[1].globalIndex, 101U);
+    EXPECT_EQ(parsed.headerPadding, archiveOptions.headerPadding);
+    EXPECT_EQ(parsed.interstitialMetadata, archiveOptions.interstitialMetadata);
+
+    auto invalidOptions = pvrOptions;
+    invalidOptions.dataLayout = DataLayout::SmallVq;
+    EXPECT_FALSE(spice::pvm::encoding::encodePvrTexture(makeEncodeImage(8U, 8U), invalidOptions).ok());
+    auto invalidArchive = archiveOptions;
+    invalidArchive.flags = 0x0010U;
+    EXPECT_FALSE(spice::pvm::encoding::encodePvmArchive(entries, invalidArchive).ok());
 }
 
 struct CorpusResult {

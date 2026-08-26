@@ -10,7 +10,9 @@
       "base_pixels": 51023872,
       "all_mip_pixels": 62187457,
       "base_hash": "5a32d9c1f3827de2",
-      "all_mip_hash": "2377b8ec424356e4"
+      "all_mip_hash": "2377b8ec424356e4",
+      "mld_archives_no_edit": 277,
+      "mld_pvr_records": 2319
     },
     "us_disc1": {
       "files": 294,
@@ -19,7 +21,9 @@
       "base_pixels": 35449088,
       "all_mip_pixels": 43445633,
       "base_hash": "c839867b5351df25",
-      "all_mip_hash": "d2c63063e6312423"
+      "all_mip_hash": "d2c63063e6312423",
+      "mld_archives_no_edit": 263,
+      "mld_pvr_records": 2113
     }
   }
 }

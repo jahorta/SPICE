@@ -1,4 +1,4 @@
-# PVM/PVR Parser and Decoder Validation
+# PVM/PVR Parser, Decoder, and Encoder Validation
 
 ## Scope
 
@@ -25,12 +25,16 @@ EU layouts: twiddled 296, twiddled mipmaps 6, VQ 360, VQ mipmaps 1,898, rectangl
 
 No selected texture used an unsupported tuple. All 2,721 previously inventoried EU `PVRT` chunks decoded successfully.
 
+The encoding follow-up added deterministic output for every promoted pixel/layout tuple, formal PVMH writing, and Dreamcast MLD integration. Read-only MLD validation parsed and no-edit wrote 277 EU archives containing 2,319 PVR records and 263 US archives containing 2,113 PVR records. All 540 selected archives reproduced their exact source bytes.
+
 ## Promoted observations
 
 - VQ-mipmap chunks in the SoA corpus pad the logical payload with zero bytes to a 32-byte boundary. The padding is inside the declared `PVRT` chunk size and is retained as a separate source range.
 - Physical mip storage is smallest-to-largest, while the public result is largest-to-smallest.
 - Layout `0x12` uses the SDK-documented six-byte prefix. Ordinary twiddled mipmaps use the two-byte 1x1 storage prefix.
 - Small VQ codebook sizes differ between mipmapped and non-mipmapped textures and match the SDK dimension table.
+- Dreamcast MLD texture records are not formal PVMH archives. They are a count plus 44-byte records followed by individual `GBIX`/`PVRT` blocks.
+- MLD record control `0x80000000` aligns the following `GBIX` to an absolute 32-byte boundary. The leading alignment bytes are outside the record's declared encoded-block size.
 
 ## Remaining unknowns
 
