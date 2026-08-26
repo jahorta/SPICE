@@ -123,6 +123,7 @@
     <ClCompile Include="test_pvm.cpp" />
     <ClCompile Include="test_mld_canonical.cpp" />
     <ClCompile Include="test_mld_endian.cpp" />
+    <ClCompile Include="test_mld_patching.cpp" />
     <ClCompile Include="test_mlk_blender_ir_export.cpp" />
     <ClCompile Include="test_mlk_corpus_export.cpp" />
     <ClCompile Include="test_mlk_parser.cpp" />

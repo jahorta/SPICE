@@ -1,0 +1,16 @@
+{
+  "validation_date": "2026-08-26",
+  "platform": "dreamcast",
+  "regions": ["eu_disc1", "us_disc1"],
+  "target_files_per_region": ["A099A.MLD", "A106A.MLD", "A106C.MLD"],
+  "target_file_count": 6,
+  "broader_field_files_checked": 24,
+  "grnd_triangles_with_provenance": 39550,
+  "gobj_triangles_with_provenance": 60,
+  "a099a_gobj_patch_targets": 2,
+  "hash_algorithm": "fnv1a64",
+  "hash_ordering": "region_eu_then_us; target_filename_order; resource_address; node; triangle",
+  "provenance_hash": "0860fb34e777f083",
+  "representative_patch_hash": "ef890738675cab0b",
+  "raw_assets_tracked": false
+}
