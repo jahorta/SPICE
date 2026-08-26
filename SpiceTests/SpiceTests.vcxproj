@@ -112,6 +112,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <None Include="fixtures\mld\s044_sml_entry_0.mld" />
+    <None Include="fixtures\spice_trade\enemyevent_quoted.csv" />
     <ClCompile Include="..\third-party\googletest-1.17.0\googletest\src\gtest-all.cc" />
     <ClCompile Include="run_tests.cpp" />
     <ClCompile Include="test_aklz.cpp" />
@@ -136,6 +137,7 @@
     <ClCompile Include="test_sst_sml_parser.cpp" />
     <ClCompile Include="test_std_parser.cpp" />
     <ClCompile Include="test_std_usage.cpp" />
+    <ClCompile Include="test_spice_trade.cpp" />
     <ClCompile Include="test_sa3dport_stage1.cpp" />
     <ClCompile Include="test_sa3dport_stage2.cpp" />
     <ClCompile Include="test_sa3dport_stage3.cpp" />
@@ -189,6 +191,9 @@
     </ProjectReference>
     <ProjectReference Include="..\SpiceStd\SpiceStd.vcxproj">
       <Project>{6A8F71C8-5C78-4E31-B40F-A15D5186E2F3}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\SpiceTrade\SpiceTrade.vcxproj">
+      <Project>{B82365CC-8B46-4BD5-AFB7-799B34D6DA19}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

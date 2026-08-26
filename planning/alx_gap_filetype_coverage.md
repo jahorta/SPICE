@@ -34,6 +34,8 @@ SPICE currently has direct project or tool surfaces for:
 - `.bin` via `SpiceBin` indexed-layout probing and corpus scanning.
 - `.std` via `SpiceStd` usage inventory scanning.
 - AKLZ decompression/recompression via `Compression`.
+- ALX 5.0.0 CSV interchange infrastructure via `SpiceTrade`. Its supported
+  table whitelist is intentionally deferred.
 
 These are not all equally complete. Several are intentionally research or
 read-only surfaces rather than writer/repack contracts.
@@ -75,6 +77,13 @@ ALX currently appears to cover these GameCube paths and formats:
 ALX also exports/imports gameplay data from those files into CSVs, including
 characters, enemies, enemy ships, skills, items, shops, script tasks, treasure
 chests, string tables, and related progression tables.
+
+`SpiceTrade` is the controlled fallback for selected ALX CSV families that
+SPICE intentionally does not plan to edit through a native filetype library.
+It is not a general ALX compatibility umbrella: native SPICE ownership takes
+precedence, and script-task CSVs remain with SALSA. The initial framework is
+pinned to ALX 5.0.0 and does not admit any table until a separate whitelist is
+approved.
 
 ## Disc Dump Extension Inventory
 
