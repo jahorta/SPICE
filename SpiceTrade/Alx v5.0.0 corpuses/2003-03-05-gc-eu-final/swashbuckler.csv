@@ -1,0 +1,25 @@
+Entry ID,EU SOT Pos,[Entry GB Name],Rating,Pad 1,Regular Atk,S-Move Atk,Dodge%,Run%,Pad 2
+0,0x802c78b0,Vyse the Ninny,5,0,0,0,50,200,0
+1,0x802c78c0,Vyse the Coward,95,0,-1,-1,1,10,0
+2,0x802c78d0,Vyse the Unimpressive,105,0,0,0,0,0,0
+3,0x802c78e8,Vyse the Blue Rogue,115,0,1,1,-1,-1,0
+4,0x802c78fc,Vyse the Competent,125,0,1,1,-1,-1,0
+5,0x802c7910,Vyse the Determined,135,0,1,1,-1,-1,0
+6,0x802c7924,Vyse the Respected,145,0,1,1,-1,-1,0
+7,0x802c7938,Vyse the Admirable,155,0,2,2,-2,-2,0
+8,0x802c794c,Vyse the Bold,165,0,2,2,-2,-2,0
+9,0x802c795c,Vyse the Valiant,175,0,2,2,-2,-2,0
+10,0x802c7970,Vyse the Daring,185,0,2,2,-2,-2,0
+11,0x802c7980,Vyse the Dashing,195,0,3,3,-3,-3,0
+12,0x802c7994,Vyse the Fearless,205,0,3,3,-3,-3,0
+13,0x802c79a8,Vyse the Hero,215,0,3,3,-3,-3,0
+14,0x802c79b8,"Vyse, King of Rogues",225,0,3,3,-3,-3,0
+15,0x802c79d0,Vyse the Legend,250,0,4,4,4,4,0
+16,0x802c79e0,Vyse the Bounty King,250,0,4,3,-4,-10,0
+17,0x802c79f8,Exploration King Vyse,250,0,3,3,0,-3,0
+18,0x802c7a10,Sky Battle King Vyse,250,0,3,3,-3,-3,0
+19,0x802c7a28,Vyse the Fisher King,250,0,3,3,-3,-3,0
+20,0x802c7a40,Vyse the Battle Lord,250,0,4,3,-3,-3,0
+21,0x802c7a58,Vyse the Extravagant,250,0,2,2,-2,-2,0
+22,0x802c7a70,Vyse the Charismatic,250,0,3,3,-3,-3,0
+23,0x802c7a88,Vyse the Fallen Pirate,0,0,-2,-2,-2,200,0

@@ -34,8 +34,8 @@ SPICE currently has direct project or tool surfaces for:
 - `.bin` via `SpiceBin` indexed-layout probing and corpus scanning.
 - `.std` via `SpiceStd` usage inventory scanning.
 - AKLZ decompression/recompression via `Compression`.
-- ALX 5.0.0 CSV interchange infrastructure via `SpiceTrade`. Its supported
-  table whitelist is intentionally deferred.
+- ALX 5.0.0 CSV interchange via `SpiceTrade`, with typed editable support for
+  `enemy.csv`, `enemyencounter.csv`, and `enemyevent.csv`.
 
 These are not all equally complete. Several are intentionally research or
 read-only surfaces rather than writer/repack contracts.
@@ -82,8 +82,9 @@ chests, string tables, and related progression tables.
 SPICE intentionally does not plan to edit through a native filetype library.
 It is not a general ALX compatibility umbrella: native SPICE ownership takes
 precedence, and script-task CSVs remain with SALSA. The initial framework is
-pinned to ALX 5.0.0 and does not admit any table until a separate whitelist is
-approved.
+pinned to ALX 5.0.0. Its current whitelist contains `enemy.csv`,
+`enemyencounter.csv`, and `enemyevent.csv`; any additional table still requires
+an explicit ownership decision before admission.
 
 ## Disc Dump Extension Inventory
 

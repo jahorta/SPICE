@@ -1,0 +1,161 @@
+Entry ID,EU SOT Pos,[Entry GB Name],Sell%,EU Order 1,EU Order 2,Pad 1,Buy,Pad 2,Pad 3,[GB Descr Str]
+320,0x8c345718,Green Crystal,0,7,12,0,0,0,0,"An ancient gem that contains the power of life.
+It has the power to summon the Green Gigas."
+321,0x8c345728,Red Crystal,0,6,24,0,0,0,0,"An ancient gem that contains the power of fire.
+It has the power to summon the Red Gigas."
+322,0x8c345734,Purple Crystal,0,9,21,0,0,0,0,"An ancient gem that contains the power of ice.
+It has the power to summon the Purple Gigas."
+323,0x8c345744,Blue Crystal,0,8,0,0,0,0,0,"An ancient gem with the power of wind and water.
+It has the power to summon the Blue Gigas."
+324,0x8c345754,Yellow Crystal,0,10,33,0,0,0,0,"An ancient gem with the power of lightning.
+It has the power to summon the Yellow Gigas."
+325,0x8c345764,GINGESSHO,0,38,-1,0,0,0,0,"CUT.
+------"
+326,0x8c34576c,Green Moon Stone,0,0,13,0,0,0,0,"A Moon Stone from the Green Moon. It can infuse
+weapons with the powers of nature."
+327,0x8c345780,Red Moon Stone,0,1,25,0,0,0,0,"A Moon Stone from the Red Moon. It can infuse
+weapons with the powers of fire."
+328,0x8c345790,Purple MoonStone,0,2,22,0,0,0,0,"A Moon Stone from the Purple Moon. It can infuse
+weapons with the powers of ice."
+329,0x8c3457a4,Blue Moon Stone,0,3,1,0,0,0,0,"A Moon Stone from the Blue Moon. It can infuse
+weapons with the powers of wind and water."
+330,0x8c3457b4,Yellow MoonStone,0,4,34,0,0,0,0,"A Moon Stone from the Yellow Moon. It can infuse
+weapons with the powers of lightning."
+331,0x8c3457c8,Silver MoonStone,0,5,27,0,0,0,0,"A Moon Stone from the Silver Moon. It can infuse
+weapons with the powers of life and death."
+332,0x8c3457dc,Underwater Suit,0,26,28,0,0,0,0,"Using a Blue Moon Stone, this water-proof suit
+allows the wearer to breathe underwater."
+333,0x8c3457ec,Note in a Bottle,0,12,19,0,0,0,0,"A note found in a bottle that says, “Quetya…
+Please send warriors to help us fight.”"
+334,0x8c345800,Cannon Room Key,0,24,3,0,0,0,0,"A large, steel key to the Cannon Room of the
+Grand Fortress. It is embossed with a dragon."
+335,0x8c345810,Ship Schematics,0,28,26,0,0,0,0,"Design for a ship that can submerge under the
+Great Cloud Sea and go into Deep Sky."
+336,0x8c345820,Gonzales' Map,0,21,9,0,0,0,0,"Map found on the remains of Gonzales. It appears
+that the map has been ripped in half."
+337,0x8c345830,Pedro's Map,0,22,20,0,0,0,0,"Map received from Pedro while in Nasrad. It
+appears that the map has been ripped in half."
+338,0x8c34583c,ALFONSO'S KEY,0,39,35,0,0,0,0,"CUT.
+------"
+339,0x8c345850,Golden Man's Eye,0,16,8,0,0,0,0,"A beautiful, orange gem found set into the eye
+of the Golden Man statue."
+340,0x8c345864,Great Bird's Eye,0,17,11,0,0,0,0,"A beautiful, blue gem found set into the eyes
+of the Great Bird."
+341,0x8c345878,Raw Moon Stone,0,11,23,0,0,0,0,"A rock containing Moon Stone ore found on Shrine
+Island. Unusable unless refined."
+342,0x8c345888,Daccat's Coin,100,23,5,0,20000,0,0,"A gold coin minted by the great Air Pirate
+Daccat, it bears his symbol on one side."
+343,0x8c345898,SISIKABAB,0,35,-1,0,0,0,0,"CONVERT.
+------"
+344,0x8c3458a4,Kabal,0,32,15,0,0,0,0,"The meat of a desert beast of burden, it is
+considered by many to be very tasty."
+345,0x8c3458ac,Gentum,0,33,7,0,500,0,0,"A fragrant fruit from northern Nasr.
+Secret ingredient used in making Kabal Skewers."
+346,0x8c3458b4,Khale,0,34,16,0,0,0,0,"An expensive spice, grown in the East.
+Secret ingredient used in making Kabal Skewers."
+347,0x8c3458bc,CHO SISIKABAB,0,36,-1,0,0,0,0,"CONVERT.
+------"
+348,0x8c3458d0,Valuan Passport,0,13,29,0,0,0,0,"A passport necessary to enter the Valuan Empire.
+Received from a Nasr merchant as a gift."
+349,0x8c3458e0,Moon Stone Fuel,0,15,18,0,0,0,0,"A Moon Stone refined for use as fuel for a ship.
+Given to Vyse by Hans when they met in Horteka."
+350,0x8c3458f0,Clara's Purse,0,19,4,0,0,0,0,"A bright pink purse containing money given to
+Aika and Fina by Clara."
+351,0x8c345900,Book of Polarity,0,27,2,0,0,0,0,"An old Yafutoman text explaining the process of
+enabling ships to fly to high and low altitudes."
+352,0x8c345914,Velorium,0,29,30,0,0,0,0,"A rare type of metal found in Deep Sky.
+It is many times stronger than normal steel."
+353,0x8c345914,Velorium,0,30,31,0,0,0,0,"A rare type of metal found in Deep Sky.
+It is many times stronger than normal steel."
+354,0x8c345920,SAISYUHEIKI3,0,37,-1,0,0,0,0,"CUT.
+------"
+355,0x8c34592c,Harbor Key,0,25,14,0,0,0,0,"A small, brass key to the Valuan Imperial
+harbor. It has a dragon embossed on it."
+356,0x8c345938,Magic Cannon,0,14,17,0,0,0,0,"A device attached to cannons that allows them
+to fire shots empowered with magic."
+357,0x8c345948,Wages,0,20,32,0,0,0,0,"Contains the 5,000 gold that Aika and Fina
+earned while working at the tavern in Nasrad."
+358,0x8c345950,Grapor Meat,0,18,10,0,0,0,0,"Meat from the rare fish, the Grapor. This fish
+is only found in the forests of Crescent Isle."
+359,0x8c34595c,Domingo's Title,0,31,6,0,0,0,0,"A certificate from Domingo proclaiming Vyse to
+be a “Treasure Hunter Extraordinaire.”"
+360,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+361,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+362,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+363,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+364,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+365,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+366,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+367,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+368,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+369,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+370,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+371,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+372,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+373,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+374,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+375,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+376,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+377,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+378,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+379,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+380,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+381,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+382,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+383,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+384,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+385,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+386,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+387,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+388,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+389,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+390,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+391,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+392,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+393,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+394,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+395,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+396,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+397,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+398,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"
+399,0x8c34596c,DUMMYCLEAR,0,-1,-1,0,0,0,0,"DUMMY
+------"

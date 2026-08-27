@@ -95,6 +95,9 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AlxTypedCodec.h" />
+    <ClInclude Include="AlxTypedModel.h" />
+    <ClInclude Include="AlxTypedWorkspace.h" />
     <ClInclude Include="CsvModel.h" />
     <ClInclude Include="CsvReader.h" />
     <ClInclude Include="CsvWriter.h" />
@@ -102,12 +105,16 @@
     <ClInclude Include="Workspace.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AlxTypedCodec.cpp" />
+    <ClCompile Include="AlxTypedModel.cpp" />
+    <ClCompile Include="AlxTypedWorkspace.cpp" />
     <ClCompile Include="CsvModel.cpp" />
     <ClCompile Include="CsvReader.cpp" />
     <ClCompile Include="CsvWriter.cpp" />
     <ClCompile Include="Workspace.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Alx v5.0.0 corpuses\**\*.csv" />
     <None Include="README.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

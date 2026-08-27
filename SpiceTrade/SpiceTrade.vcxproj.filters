@@ -16,8 +16,23 @@
     <Filter Include="Workspace">
       <UniqueIdentifier>{34A090C6-3F42-45F4-AEE5-2F6F179901D4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Typed ALX">
+      <UniqueIdentifier>{E950A2AA-9A2D-48DF-A1E5-48DD0B4924CC}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Reference Corpus">
+      <UniqueIdentifier>{724F44D5-78CB-460C-BA8D-0582FF715F63}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="AlxTypedCodec.h">
+      <Filter>Typed ALX</Filter>
+    </ClInclude>
+    <ClInclude Include="AlxTypedModel.h">
+      <Filter>Typed ALX</Filter>
+    </ClInclude>
+    <ClInclude Include="AlxTypedWorkspace.h">
+      <Filter>Typed ALX</Filter>
+    </ClInclude>
     <ClInclude Include="SpiceTrade.h">
       <Filter>EntryPoint</Filter>
     </ClInclude>
@@ -35,6 +50,15 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AlxTypedCodec.cpp">
+      <Filter>Typed ALX</Filter>
+    </ClCompile>
+    <ClCompile Include="AlxTypedModel.cpp">
+      <Filter>Typed ALX</Filter>
+    </ClCompile>
+    <ClCompile Include="AlxTypedWorkspace.cpp">
+      <Filter>Typed ALX</Filter>
+    </ClCompile>
     <ClCompile Include="CsvModel.cpp">
       <Filter>Model</Filter>
     </ClCompile>
@@ -49,6 +73,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <None Include="Alx v5.0.0 corpuses\**\*.csv">
+      <Filter>Reference Corpus</Filter>
+    </None>
     <None Include="README.md" />
   </ItemGroup>
 </Project>

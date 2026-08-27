@@ -64,6 +64,22 @@ public:
     std::filesystem::path path{};
 };
 
+std::filesystem::path referenceCorpusRoot()
+{
+    auto cursor = std::filesystem::current_path();
+    for (std::size_t depth = 0U; depth < 8U; ++depth) {
+        const auto candidate = cursor / "SpiceTrade" / "Alx v5.0.0 corpuses";
+        if (std::filesystem::is_directory(candidate)) {
+            return candidate;
+        }
+        if (!cursor.has_parent_path() || cursor.parent_path() == cursor) {
+            break;
+        }
+        cursor = cursor.parent_path();
+    }
+    return {};
+}
+
 bool hasWarning(const std::vector<spice::trade::alx::CsvDiagnostic>& diagnostics)
 {
     for (const auto& diagnostic : diagnostics) {
@@ -248,23 +264,20 @@ TEST(SpiceTradeWorkspace, LeavesDocumentDirtyWhenOutputFails)
     EXPECT_TRUE(workspace.documents.front().changed());
 }
 
-TEST(SpiceTradeAlx500CodecCorpus, TopLevelCsvFilesParseAndSemanticallyRoundTrip)
+TEST(SpiceTradeAlx500CodecCorpus, RepoReferenceCsvFilesParseAndSemanticallyRoundTrip)
 {
-    const std::filesystem::path dataRoot =
-        R"(D:\SoANotes\SoA stat file dumps (ALX)\ALX-5.0.0\dist\2002-12-19-gc-us-final\data)";
-    if (!std::filesystem::is_directory(dataRoot)) {
-        GTEST_SKIP() << "Local ALX 5.0.0 corpus is unavailable";
-    }
+    const auto dataRoot = referenceCorpusRoot();
+    ASSERT_FALSE(dataRoot.empty()) << "Repo-local ALX 5.0.0 reference corpus is unavailable";
 
     std::vector<std::filesystem::path> csvFiles{};
-    for (const auto& entry : std::filesystem::directory_iterator(dataRoot)) {
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(dataRoot)) {
         if (entry.is_regular_file() && entry.path().extension() == ".csv") {
             csvFiles.push_back(entry.path());
         }
     }
     std::sort(csvFiles.begin(), csvFiles.end());
 
-    ASSERT_EQ(csvFiles.size(), 31U);
+    ASSERT_EQ(csvFiles.size(), 282U);
     for (const auto& csvFile : csvFiles) {
         const auto parsed = CsvReader{}.readFile(csvFile);
         ASSERT_TRUE(parsed.ok()) << csvFile.string();

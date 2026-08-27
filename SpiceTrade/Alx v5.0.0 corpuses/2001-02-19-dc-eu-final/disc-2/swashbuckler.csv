@@ -1,0 +1,17 @@
+Entry ID,EU SOT Pos,[Entry GB Name],Rating,Pad 1,Regular Atk,S-Move Atk,Dodge%,Run%,Pad 2
+0,0x8c34597c,Vyse the Ninny,5,0,0,0,50,200,0
+1,0x8c34598c,Vyse the Coward,95,0,-1,-1,1,10,0
+2,0x8c34599c,Vyse the Unimpressive,105,0,0,0,0,0,0
+3,0x8c3459b4,Vyse the Blue Rogue,115,0,1,1,-1,-1,0
+4,0x8c3459c8,Vyse the Competent,125,0,1,1,-1,-1,0
+5,0x8c3459dc,Vyse the Determined,135,0,1,1,-1,-1,0
+6,0x8c3459f0,Vyse the Respected,145,0,1,1,-1,-1,0
+7,0x8c345a04,Vyse the Admirable,155,0,2,2,-2,-2,0
+8,0x8c345a18,Vyse the Bold,165,0,2,2,-2,-2,0
+9,0x8c345a28,Vyse the Valiant,175,0,2,2,-2,-2,0
+10,0x8c345a3c,Vyse the Daring,185,0,2,2,-2,-2,0
+11,0x8c345a4c,Vyse the Dashing,195,0,3,3,-3,-3,0
+12,0x8c345a60,Vyse the Fearless,205,0,3,3,-3,-3,0
+13,0x8c345a74,Vyse the Hero,215,0,3,3,-3,-3,0
+14,0x8c345a84,"Vyse, King of Rogues",225,0,3,3,-3,-3,0
+15,0x8c345a9c,Vyse the Legend,250,0,4,4,4,4,0
