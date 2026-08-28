@@ -14,7 +14,7 @@ found.
 
 ## Generated Reports
 
-`--export-mlk-corpus` now writes seven files:
+The `export-mlk-corpus` command writes seven files:
 
 - `mlk_corpus.json`
 - `mlk_corpus_files.csv`

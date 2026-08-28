@@ -208,7 +208,7 @@ the two observed battle `.std` layout forms:
 
 The parser handles AKLZ-wrapped inputs, preserves decoded bytes, exports
 decoded or AKLZ-compressed bytes, and emits `spice_std_ir_v1` JSON through
-`SpiceFileParsing --export-std-json`. The current contract intentionally keeps
+`SpiceFileParsing export-std-json --input <dir> --output <dir>`. The current contract intentionally keeps
 opaque payload bytes intact unless a type-specific editor owns them.
 
 The initial EU baseline scan produced:

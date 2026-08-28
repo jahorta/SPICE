@@ -35,41 +35,44 @@ Use the VS 18 MSBuild toolchain from the repo root:
 
 ## CLI
 
+Running with no arguments or with `--help` prints the command list. Inputs and
+outputs are always explicit; use `<command> --help` for command-specific usage.
+
 ```powershell
-.\bin\x64\Debug\SpiceFileParsing.exe <input_dir> <output_dir> --sct-only
-.\bin\x64\Debug\SpiceFileParsing.exe <input_dir> <output_dir> --export-mld-entry-list-only
-.\bin\x64\Debug\SpiceFileParsing.exe <mld_input_dir> <output_dir> --sample-mld-gvr-formats
-.\bin\x64\Debug\SpiceFileParsing.exe <input_dir> <output_dir> --content-graph --content-graph-projection sections
-.\bin\x64\Debug\SpiceFileParsing.exe <input_dir> <output_dir> --gvr-only --export-gvr-image-ir
-.\bin\x64\Debug\SpiceFileParsing.exe <ir_dir> <output_dir> --gvr-only --import-gvr-image-ir --gvr-aklz preserve
-.\bin\x64\Debug\SpiceFileParsing.exe --create-gvr texture.png texture.gvr --gvr-format cmpr --gvr-mipmaps on
-.\bin\x64\Debug\SpiceFileParsing.exe --replace-gvr original.gvr replacement.png texture.gvr
-.\bin\x64\Debug\SpiceFileParsing.exe --replace-mld-texture source.mld replacement.png output.mld --mld-texture-name tk000000 --gvr-format rgba8 --mld-allow-dimension-change
-.\bin\x64\Debug\SpiceFileParsing.exe <png_dir> <gvr_out_dir> --gvr-only --create-gvr-batch --gvr-format ci8 --gvr-palette-format rgb5a3
-.\bin\x64\Debug\SpiceFileParsing.exe <png_dir> <gvr_out_dir> --gvr-only --replace-gvr-batch <source_gvr_dir>
+.\bin\x64\Debug\SpiceFileParsing.exe parse-sct --input <input_dir> --output <output_dir>
+.\bin\x64\Debug\SpiceFileParsing.exe export-mld-entry-list --input <input_dir> --output <output_dir>
+.\bin\x64\Debug\SpiceFileParsing.exe inventory-mld-gvr-formats --input <mld_input_dir> --output <output_dir>
+.\bin\x64\Debug\SpiceFileParsing.exe export-content-graph --input <input_dir> --output <output_dir> --projection sections
+.\bin\x64\Debug\SpiceFileParsing.exe export-gvr-image-ir --input <input_dir> --output <output_dir>
+.\bin\x64\Debug\SpiceFileParsing.exe import-gvr-image-ir --input <ir_dir> --output <output_dir> --aklz preserve
+.\bin\x64\Debug\SpiceFileParsing.exe create-gvr --input texture.png --output texture.gvr --format cmpr --mipmaps on
+.\bin\x64\Debug\SpiceFileParsing.exe replace-gvr --source original.gvr --input replacement.png --output texture.gvr
+.\bin\x64\Debug\SpiceFileParsing.exe replace-mld-texture --source source.mld --replacement replacement.png --output output.mld --texture-name tk000000 --format rgba8 --allow-dimension-change
+.\bin\x64\Debug\SpiceFileParsing.exe create-gvr-batch --input <png_dir> --output <gvr_out_dir> --format ci8 --palette-format rgb5a3
+.\bin\x64\Debug\SpiceFileParsing.exe replace-gvr-batch --input <png_dir> --source-gvr-dir <source_gvr_dir> --output <gvr_out_dir>
 ```
 
 Standalone `.gvr` image IR export writes lossless RGBA PNG files plus
 `.gvr.json` sidecars. Import supports I4, I8, IA4, IA8, RGB565, RGB5A3, RGBA8,
 CI4, CI8, CI14X2, and CMPR GVR output through the sidecar `importTextureFormat`
 field. Indexed output supports IA8, RGB565, and RGB5A3 internal palettes through
-`importPaletteFormat`. `--gvr-aklz preserve|compressed|raw` controls wrapping;
+`importPaletteFormat`. `--aklz preserve|compressed|raw` controls wrapping;
 `preserve` keeps AKLZ wrapping when the sidecar says the source file was
 AKLZ-compressed.
 
 Sidecar-free GVR creation and replacement accept PNG input directly. New GVRs default
 to RGBA8, no mipmaps, raw output, and no global index. Replacement preserves the
 source GVR format, palette format, mipmap flag, AKLZ wrapping, and GCIX/global-index
-value unless explicit `--gvr-format`, `--gvr-palette-format`, `--gvr-mipmaps`,
-`--gvr-aklz`, or `--gvr-global-index` overrides are supplied.
+value unless explicit `--format`, `--palette-format`, `--mipmaps`, `--aklz`, or
+`--global-index` overrides are supplied.
 
 MLD GVR format sampling writes `mld_gvr_format_inventory.json` and
 `mld_gvr_format_priority_report.md` without raw texture payloads.
 
 Embedded MLD texture replacement rebuilds the texture archive, so replacement
-GVR payloads may grow or shrink. Select the target with `--mld-texture-index` or
-`--mld-texture-name`; output preserves MLD AKLZ wrapping by default through
-`--mld-aklz preserve`. If an archive is not terminal, size-changing replacements
-fail unless `--mld-allow-post-archive-shift` is supplied.
+GVR payloads may grow or shrink. Select the target with `--texture-index` or
+`--texture-name`; output preserves MLD AKLZ wrapping by default through
+`--aklz preserve`. If an archive is not terminal, size-changing replacements
+fail unless `--allow-post-archive-shift` is supplied.
 
 Reference materials and sample parser fixtures are under `soa_parser_reference_bundle/`.

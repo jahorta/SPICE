@@ -139,6 +139,22 @@
     <ClCompile Include="test_std_usage.cpp" />
     <ClCompile Include="test_spice_trade.cpp" />
     <ClCompile Include="test_spice_trade_typed.cpp" />
+    <ClCompile Include="test_spice_file_parsing_cli.cpp" />
+    <ClCompile Include="..\SpiceFileParsing\Cli\CliParser.cpp">
+      <Link>SpiceFileParsing\CliParser.cpp</Link>
+    </ClCompile>
+    <ClCompile Include="..\SpiceFileParsing\Application\OperationPreflight.cpp">
+      <Link>SpiceFileParsing\OperationPreflight.cpp</Link>
+    </ClCompile>
+    <ClCompile Include="..\SpiceFileParsing\Application\OperationRunner.cpp">
+      <Link>SpiceFileParsing\OperationRunner.cpp</Link>
+    </ClCompile>
+    <ClCompile Include="..\SpiceFileParsing\Operations\OperationExecution.cpp">
+      <Link>SpiceFileParsing\OperationRunner.cpp</Link>
+    </ClCompile>
+    <ClCompile Include="..\SpiceFileParsing\AlxEnemyEventExport.cpp">
+      <Link>SpiceFileParsing\AlxEnemyEventExport.cpp</Link>
+    </ClCompile>
     <ClCompile Include="test_sa3dport_stage1.cpp" />
     <ClCompile Include="test_sa3dport_stage2.cpp" />
     <ClCompile Include="test_sa3dport_stage3.cpp" />

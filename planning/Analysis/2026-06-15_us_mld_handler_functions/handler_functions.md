@@ -6,7 +6,7 @@ Corpus: `D:\SoAGC\2002-12-19-gc-us-final_Skies_of_Arcadia_Legends`
 
 Method:
 
-- Exported entry-list JSON for every US `.mld` file with `SpiceFileParsing.exe --export-mld-entry-list-only`.
+- Exported entry-list JSON for every US `.mld` file with `SpiceFileParsing.exe export-mld-entry-list --input <US-disc-root> --output SpiceFileParsing\parsed\us_mld_handler_entry_lists_v2`.
 - Preserved source subdirectories in the local generated output under `SpiceFileParsing\parsed\us_mld_handler_entry_lists_v2`.
 - Read each index entry `function` field from the exported JSON.
 - Ignored blank function names.
