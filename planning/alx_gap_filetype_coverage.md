@@ -23,8 +23,8 @@ snapshot.
 
 SPICE currently has direct project or tool surfaces for:
 
-- `.sct` via `SpiceSCT` and `SpiceFileParsing`.
-- `.mld` via `SpiceMLD` and `SpiceFileParsing`.
+- `.sct` via `SpiceSCT` and `SpiceGrinder`.
+- `.mld` via `SpiceMLD` and `SpiceGrinder`.
 - `.gvr` / `.gvm` via `SpiceGvm`, including standalone GVR image IR,
   create/replace, and PNG export paths.
 - `.ect` via `SpiceEct`.
@@ -208,7 +208,7 @@ the two observed battle `.std` layout forms:
 
 The parser handles AKLZ-wrapped inputs, preserves decoded bytes, exports
 decoded or AKLZ-compressed bytes, and emits `spice_std_ir_v1` JSON through
-`SpiceFileParsing export-std-json --input <dir> --output <dir>`. The current contract intentionally keeps
+`SpiceGrinder export-std-json --input <dir> --output <dir>`. The current contract intentionally keeps
 opaque payload bytes intact unless a type-specific editor owns them.
 
 The initial EU baseline scan produced:

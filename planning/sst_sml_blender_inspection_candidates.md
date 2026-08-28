@@ -53,7 +53,7 @@ These are worth keeping nearby, but are not in the first 10-stage batch:
 For one stage copied into a small input folder with same-stem `.sml` and `.sst`:
 
 ```powershell
-.\bin\x64\Debug\SpiceFileParsing.exe export-sml-research --input <input_dir> --output <output_dir> --annotation-repository SpiceSstSml\research\results\state_annotations --embedded-mld --combined-blender-ir --command-map
+.\bin\x64\Debug\SpiceGrinder.exe export-sml-research --input <input_dir> --output <output_dir> --annotation-repository SpiceSstSml\research\results\state_annotations --embedded-mld --combined-blender-ir --command-map
 ```
 
 The combined Blender IR goes to `<output_dir>\<stem>\<stem>_combined_blender_ir_scene.json`.

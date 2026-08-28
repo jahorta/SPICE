@@ -19,7 +19,7 @@
 
 namespace {
 
-using spice::core::Endian;
+using spice::root::Endian;
 using spice::mld::model::MldFile;
 using spice::mld::model::MldGroundResource;
 using spice::mld::patching::DreamcastTriangleSelectorEdit;

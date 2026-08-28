@@ -16,7 +16,7 @@
 
 namespace {
 
-using spice::core::Endian;
+using spice::root::Endian;
 using spice::mld::exporting::MldFileWriter;
 using spice::mld::parsing::MldParser;
 

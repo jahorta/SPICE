@@ -139,28 +139,16 @@
     <ClCompile Include="test_std_usage.cpp" />
     <ClCompile Include="test_spice_trade.cpp" />
     <ClCompile Include="test_spice_trade_typed.cpp" />
-    <ClCompile Include="test_spice_file_parsing_cli.cpp" />
-    <ClCompile Include="..\SpiceFileParsing\Cli\CliParser.cpp">
-      <Link>SpiceFileParsing\CliParser.cpp</Link>
-    </ClCompile>
-    <ClCompile Include="..\SpiceFileParsing\Application\OperationPreflight.cpp">
-      <Link>SpiceFileParsing\OperationPreflight.cpp</Link>
-    </ClCompile>
-    <ClCompile Include="..\SpiceFileParsing\Application\OperationRunner.cpp">
-      <Link>SpiceFileParsing\OperationRunner.cpp</Link>
-    </ClCompile>
-    <ClCompile Include="..\SpiceFileParsing\Operations\OperationExecution.cpp">
-      <Link>SpiceFileParsing\OperationRunner.cpp</Link>
-    </ClCompile>
-    <ClCompile Include="..\SpiceFileParsing\AlxEnemyEventExport.cpp">
-      <Link>SpiceFileParsing\AlxEnemyEventExport.cpp</Link>
+    <ClCompile Include="test_spice_grinder_cli.cpp" />
+    <ClCompile Include="..\SpiceGrinder\Cli\CliParser.cpp">
+      <Link>SpiceGrinder\CliParser.cpp</Link>
     </ClCompile>
     <ClCompile Include="test_sa3dport_stage1.cpp" />
     <ClCompile Include="test_sa3dport_stage2.cpp" />
     <ClCompile Include="test_sa3dport_stage3.cpp" />
     <ClCompile Include="test_sa3dport_stage4.cpp" />
     <ClCompile Include="test_sa3dport_stage5.cpp" />
-    <ClCompile Include="test_spicecore.cpp" />
+    <ClCompile Include="test_spiceroot.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="test_spice_blender_lookup_image_runtime.py" />
@@ -170,8 +158,11 @@
     <ProjectReference Include="..\Compression\Compression.vcxproj">
       <Project>{4F68E37C-185F-4DE8-A4D7-647E6F3659C4}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\SpiceCore\SpiceCore.vcxproj">
+    <ProjectReference Include="..\SpiceRoot\SpiceRoot.vcxproj">
       <Project>{6F9D8280-6F7B-4237-9D4A-D9A09E7A1B2E}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\SpiceMix\SpiceMix.vcxproj">
+      <Project>{92E102AE-65E7-4C12-98B1-3C5EBDCE83A0}</Project>
     </ProjectReference>
     <ProjectReference Include="..\SpiceBin\SpiceBin.vcxproj">
       <Project>{CADB9B1C-FB06-4BDE-9B5E-2AA1836DEE05}</Project>

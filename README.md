@@ -1,19 +1,39 @@
 # SPICE
 
-SPICE is the Skies Package Interchange and Content Encoder. This first split preserves the existing Skies of Arcadia parser/content tooling behavior, including SCT parsing, MLD entry-list export, content graph export, and SA3D-backed geometry/Blender IR support.
+SPICE is the Skies Package Interchange and Content Encoder. It provides
+file-type libraries, reusable file operations, a command-line frontend, and a
+Qt desktop frontend for Skies of Arcadia content tooling.
+
+## Frontend architecture
+
+- `SpiceRoot` contains low-level, file-type-neutral primitives used throughout
+  the repository.
+- `SpiceMix` contains reusable, non-Qt operations. It accepts typed requests,
+  reports structured events, and supports cancellation without depending on a
+  particular frontend.
+- `SpiceGrinder` is the command-line frontend. It parses CLI arguments, runs a
+  SpiceMix request, and renders operation events to the console.
+- `SpiceRack` is the Qt desktop frontend. Its first version is a launchable GUI
+  shell over SpiceMix; interactive operation forms will be added separately.
+
+SpiceGrinder and SpiceRack are separate executables. Running SpiceGrinder with
+no arguments prints CLI help and does not launch the GUI.
 
 ## Scope
 
 Included projects:
 
 - Compression
+- SpiceRoot
+- SpiceMix
+- SpiceGrinder
+- SpiceRack
 - SpiceGvm
 - SpiceSCT
 - SpiceMLD
 - SpiceMll
 - SpiceContentGraph
 - SpiceTests
-- SpiceFileParsing
 - Sa3Dport
 - tools/sa3d_ref_runner
 - third-party/SA3D.Modeling
@@ -21,7 +41,9 @@ Included projects:
 
 ## Build
 
-Use the VS 18 MSBuild toolchain from the repo root:
+The full solution requires the MSVC v145 toolchain and the Qt VS Tools
+registration `6.10.3_msvc2022_64` (Qt Core, Gui, and Widgets). Use the VS 18
+MSBuild toolchain from the repo root:
 
 ```powershell
 & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" SPICE.sln /p:Configuration=Debug /p:Platform=x64 /m:1 /nr:false /v:minimal
@@ -39,18 +61,40 @@ Running with no arguments or with `--help` prints the command list. Inputs and
 outputs are always explicit; use `<command> --help` for command-specific usage.
 
 ```powershell
-.\bin\x64\Debug\SpiceFileParsing.exe parse-sct --input <input_dir> --output <output_dir>
-.\bin\x64\Debug\SpiceFileParsing.exe export-mld-entry-list --input <input_dir> --output <output_dir>
-.\bin\x64\Debug\SpiceFileParsing.exe inventory-mld-gvr-formats --input <mld_input_dir> --output <output_dir>
-.\bin\x64\Debug\SpiceFileParsing.exe export-content-graph --input <input_dir> --output <output_dir> --projection sections
-.\bin\x64\Debug\SpiceFileParsing.exe export-gvr-image-ir --input <input_dir> --output <output_dir>
-.\bin\x64\Debug\SpiceFileParsing.exe import-gvr-image-ir --input <ir_dir> --output <output_dir> --aklz preserve
-.\bin\x64\Debug\SpiceFileParsing.exe create-gvr --input texture.png --output texture.gvr --format cmpr --mipmaps on
-.\bin\x64\Debug\SpiceFileParsing.exe replace-gvr --source original.gvr --input replacement.png --output texture.gvr
-.\bin\x64\Debug\SpiceFileParsing.exe replace-mld-texture --source source.mld --replacement replacement.png --output output.mld --texture-name tk000000 --format rgba8 --allow-dimension-change
-.\bin\x64\Debug\SpiceFileParsing.exe create-gvr-batch --input <png_dir> --output <gvr_out_dir> --format ci8 --palette-format rgb5a3
-.\bin\x64\Debug\SpiceFileParsing.exe replace-gvr-batch --input <png_dir> --source-gvr-dir <source_gvr_dir> --output <gvr_out_dir>
+.\bin\x64\Debug\SpiceGrinder.exe parse-sct --input <input_dir> --output <output_dir>
+.\bin\x64\Debug\SpiceGrinder.exe export-mld-entry-list --input <input_dir> --output <output_dir>
+.\bin\x64\Debug\SpiceGrinder.exe inventory-mld-gvr-formats --input <mld_input_dir> --output <output_dir>
+.\bin\x64\Debug\SpiceGrinder.exe export-content-graph --input <input_dir> --output <output_dir> --projection sections
+.\bin\x64\Debug\SpiceGrinder.exe export-gvr-image-ir --input <input_dir> --output <output_dir>
+.\bin\x64\Debug\SpiceGrinder.exe import-gvr-image-ir --input <ir_dir> --output <output_dir> --aklz preserve
+.\bin\x64\Debug\SpiceGrinder.exe create-gvr --input texture.png --output texture.gvr --format cmpr --mipmaps on
+.\bin\x64\Debug\SpiceGrinder.exe replace-gvr --source original.gvr --input replacement.png --output texture.gvr
+.\bin\x64\Debug\SpiceGrinder.exe replace-mld-texture --source source.mld --replacement replacement.png --output output.mld --texture-name tk000000 --format rgba8 --allow-dimension-change
+.\bin\x64\Debug\SpiceGrinder.exe create-gvr-batch --input <png_dir> --output <gvr_out_dir> --format ci8 --palette-format rgb5a3
+.\bin\x64\Debug\SpiceGrinder.exe replace-gvr-batch --input <png_dir> --source-gvr-dir <source_gvr_dir> --output <gvr_out_dir>
 ```
+
+## GUI
+
+Launch the desktop shell with:
+
+```powershell
+.\bin\x64\Debug\SpiceRack.exe
+```
+
+For automated launch validation, `SpiceRack.exe --smoke-test` initializes and
+shows the main window, then exits immediately.
+
+## Breaking project-name migration
+
+This architecture is a clean break. Update project references, includes,
+namespaces, and executable invocations using this mapping:
+
+| Retired name | Replacement |
+| --- | --- |
+| `SpiceCore` | `SpiceRoot` |
+| `SpiceFileParsing` executable/CLI | `SpiceGrinder` |
+| reusable operation sources formerly inside `SpiceFileParsing` | `SpiceMix` |
 
 Standalone `.gvr` image IR export writes lossless RGBA PNG files plus
 `.gvr.json` sidecars. Import supports I4, I8, IA4, IA8, RGB565, RGB5A3, RGBA8,

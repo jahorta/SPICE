@@ -20,7 +20,7 @@
 
 namespace {
 
-using spice::core::Endian;
+using spice::root::Endian;
 using spice::mld::exporting::MldExportOptions;
 using spice::mld::exporting::MldFileExporter;
 using spice::mld::exporting::MldFileWriter;
