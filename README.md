@@ -97,13 +97,21 @@ Editing controls live in a resizable right sidebar. Job history stays collapsed
 above the status bar until its arrow button is selected; warnings and errors
 highlight that button without opening the history automatically.
 
+Local MLD, GVR, and PVR files can also be dragged from Explorer onto SpiceRack.
+Multiple documents open sequentially, existing tabs are reused, and unsupported
+or invalid files are summarized after the batch. In the MLD Textures page, drop
+one PNG directly onto the texture viewport to replace the selected editable GVR
+or PVR entry. Rack confirms the target, dimensions, and active encoding settings
+before staging the replacement; PNG drops elsewhere are intentionally ignored.
+
 For automated launch validation, `SpiceRack.exe --smoke-test` initializes the
 main window and verifies the status/event toggle plus deterministic viewport
-rendering. Supplying an MLD, GVR, or PVR path also waits for the background document
-load and checks the loaded workbench; failures return a nonzero code:
+rendering and drop routing. Supplying one or more MLD, GVR, or PVR paths opens
+them sequentially, waits for the background loads, and checks the final loaded
+workbench; failures return a nonzero code:
 
 ```powershell
-.\bin\x64\Debug\SpiceRack.exe --smoke-test <document.mld-gvr-or-pvr>
+.\bin\x64\Debug\SpiceRack.exe --smoke-test <document.mld-gvr-or-pvr> [more-documents...]
 ```
 
 ## Breaking project-name migration
