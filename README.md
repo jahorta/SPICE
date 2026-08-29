@@ -83,14 +83,14 @@ Launch the desktop application with:
 ```
 
 SpiceRack uses closable document tabs. The MLD workbench exposes overview,
-entry, texture, export, and diagnostic pages; GVR textures can be replaced from
-PNG and staged across multiple entries before saving to a new MLD. The Exports
+entry, texture, export, and diagnostic pages; GVR and PVR textures can be
+replaced from PNG and staged across multiple entries before saving to a new MLD. The Exports
 page writes Blender IR JSON, detailed entry-list JSON, or both from the current
-document state, including staged changes. PVR textures are read-only but support
-preview, native extraction, and PNG export. The standalone
-GVR workbench can open GVR files or create a new RGBA8 GVR from PNG. Advanced
-controls expose format, palette, mipmap, global-index, and AKLZ wrapper choices.
-Both texture workbenches use a shared viewport with crisp nearest-neighbor,
+document state, including staged changes. Standalone GVR and PVR workbenches can
+open native textures or create new textures from PNG. Advanced GVR controls
+expose format, palette, mipmap, global-index, and AKLZ wrapper choices; PVR
+controls expose pixel format, data layout, and global index.
+All texture workbenches use a shared viewport with crisp nearest-neighbor,
 whole-number fit as the default. Linear sampling is available as an approximate
 filtered preview, alongside explicit zoom and transparency-background controls.
 Editing controls live in a resizable right sidebar. Job history stays collapsed
@@ -99,11 +99,11 @@ highlight that button without opening the history automatically.
 
 For automated launch validation, `SpiceRack.exe --smoke-test` initializes the
 main window and verifies the status/event toggle plus deterministic viewport
-rendering. Supplying an MLD or GVR path also waits for the background document
+rendering. Supplying an MLD, GVR, or PVR path also waits for the background document
 load and checks the loaded workbench; failures return a nonzero code:
 
 ```powershell
-.\bin\x64\Debug\SpiceRack.exe --smoke-test <document.mld-or-gvr>
+.\bin\x64\Debug\SpiceRack.exe --smoke-test <document.mld-gvr-or-pvr>
 ```
 
 ## Breaking project-name migration

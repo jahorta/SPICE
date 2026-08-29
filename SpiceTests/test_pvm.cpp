@@ -517,6 +517,31 @@ spice::pvm::model::RgbaImage makeEncodeImage(
     return image;
 }
 
+TEST(SpicePvmParser, PreservesArbitraryGbixTrailingMetadataThroughEncoding)
+{
+    spice::pvm::encoding::PvrEncodeOptions options{};
+    options.pixelFormat = PixelFormat::Argb4444;
+    options.dataLayout = DataLayout::Twiddled;
+    options.includeGlobalIndex = true;
+    options.globalIndex = 0x89ABCDEFU;
+    options.gbixTrailingBytes = {0x10U, 0x20U, 0x30U, 0x40U, 0x50U, 0x60U};
+    options.pvrtUnknownHeader = {0xA6U, 0x5BU};
+    const auto encoded = spice::pvm::encoding::encodePvrTexture(
+        makeEncodeImage(8U, 8U), options);
+    ASSERT_TRUE(encoded.ok());
+
+    const auto parsed = spice::pvm::parsing::parsePvrTexture(encoded.bytes);
+    ASSERT_EQ(parsed.status, ParseStatus::Complete);
+    ASSERT_TRUE(parsed.globalIndex.has_value());
+    EXPECT_EQ(*parsed.globalIndex, options.globalIndex);
+    EXPECT_EQ(parsed.gbixTrailingBytes, options.gbixTrailingBytes);
+    EXPECT_EQ(parsed.pvrtUnknownHeader,
+        (std::vector<std::uint8_t>{options.pvrtUnknownHeader[0], options.pvrtUnknownHeader[1]}));
+    ASSERT_TRUE(parsed.gbixRange.has_value());
+    EXPECT_EQ(parsed.gbixRange->size, 12U + options.gbixTrailingBytes.size());
+    EXPECT_EQ(parsed.sourceBytes, encoded.bytes);
+}
+
 TEST(SpicePvmEncoder, RoundTripsEveryPromotedPixelFormatAndLayoutDeterministically)
 {
     const std::array formats{PixelFormat::Argb1555, PixelFormat::Rgb565, PixelFormat::Argb4444};

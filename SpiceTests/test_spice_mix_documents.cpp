@@ -1,7 +1,10 @@
 #include "../SpiceMix/Documents/GvrDocumentSession.h"
 #include "../SpiceMix/Documents/MldDocumentSession.h"
+#include "../SpiceMix/Documents/PvrDocumentSession.h"
 #include "../SpiceGvm/Encoding/GvrEncoder.h"
 #include "../SpiceGvm/Image/PngCodec.h"
+#include "../SpicePvm/Encoding/PvrEncoder.h"
+#include "../SpicePvm/Parsing/PvmParser.h"
 
 #include <gtest/gtest.h>
 
@@ -25,6 +28,13 @@ void writeU32Be(std::vector<std::uint8_t>& bytes, const std::size_t offset, cons
     bytes[offset + 3U] = static_cast<std::uint8_t>(value);
 }
 
+void writeU32Le(std::vector<std::uint8_t>& bytes, const std::size_t offset, const std::uint32_t value) {
+    bytes[offset] = static_cast<std::uint8_t>(value);
+    bytes[offset + 1U] = static_cast<std::uint8_t>(value >> 8U);
+    bytes[offset + 2U] = static_cast<std::uint8_t>(value >> 16U);
+    bytes[offset + 3U] = static_cast<std::uint8_t>(value >> 24U);
+}
+
 void writeFile(const std::filesystem::path& path, const std::span<const std::uint8_t> bytes) {
     std::ofstream output(path, std::ios::binary | std::ios::trunc);
     output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
@@ -33,6 +43,11 @@ void writeFile(const std::filesystem::path& path, const std::span<const std::uin
 std::string readText(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     return std::string(std::istreambuf_iterator<char>(input), {});
+}
+
+std::vector<std::uint8_t> readFile(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(input), {});
 }
 
 std::filesystem::path makeTempDirectory() {
@@ -99,6 +114,77 @@ std::vector<std::uint8_t> makeTwoTextureMld() {
     return bytes;
 }
 
+spice::pvm::model::RgbaImage pvrImage(const std::uint32_t width,
+    const std::uint32_t height, const std::uint8_t bias) {
+    const auto source = image(width, height, bias, static_cast<std::uint8_t>(bias + 31U));
+    return {
+        .width = source.width,
+        .height = source.height,
+        .pixels = source.rgba8,
+    };
+}
+
+std::vector<std::uint8_t> encodePvr(const std::uint32_t size,
+    const std::uint32_t globalIndex, const std::uint8_t bias) {
+    spice::pvm::encoding::PvrEncodeOptions options{};
+    options.pixelFormat = spice::pvm::model::PixelFormat::Rgb565;
+    options.dataLayout = spice::pvm::model::DataLayout::Twiddled;
+    options.includeGlobalIndex = true;
+    options.globalIndex = globalIndex;
+    options.gbixTrailingBytes = {0x11U, 0x22U, 0x33U, 0x44U, 0x55U};
+    options.pvrtUnknownHeader = {0xA1U, 0xB2U};
+    const auto encoded = spice::pvm::encoding::encodePvrTexture(
+        pvrImage(size, size, bias), options);
+    EXPECT_TRUE(encoded.ok());
+    return encoded.bytes;
+}
+
+std::vector<std::uint8_t> makeDreamcastTextureMld(
+    const std::vector<std::vector<std::uint8_t>>& textures) {
+    constexpr std::size_t textureTable = 0x340U;
+    constexpr std::size_t recordSize = 44U;
+    const std::size_t archiveHeaderSize = 4U + textures.size() * recordSize;
+    std::vector<std::uint8_t> bytes(textureTable + archiveHeaderSize, 0U);
+    writeU32Le(bytes, 0x00U, 1U);
+    writeU32Le(bytes, 0x04U, 0x20U);
+    writeU32Le(bytes, 0x08U, 0x108U);
+    writeU32Le(bytes, 0x0CU, 0x180U);
+    writeU32Le(bytes, 0x10U, static_cast<std::uint32_t>(textureTable));
+    writeU32Le(bytes, 0x20U, 7U);
+    writeU32Le(bytes, 0x24U, 9U);
+    writeU32Le(bytes, 0x28U, 0x100U);
+    writeU32Le(bytes, 0x2CU, 0x108U);
+    writeU32Le(bytes, 0x30U, 0x108U);
+    writeU32Le(bytes, 0x34U, 0x118U);
+    writeU32Le(bytes, 0x38U, 0x120U);
+    writeU32Le(bytes, 0x3CU, 0x128U);
+    writeU32Le(bytes, 0x40U, static_cast<std::uint32_t>(textureTable));
+    const std::string functionName = "textures";
+    std::copy(functionName.begin(), functionName.end(), bytes.begin() + 0x44U);
+    writeU32Le(bytes, 0x100U, 0U);
+    writeU32Le(bytes, 0x108U, 2U);
+    writeU32Le(bytes, 0x10CU, 11U);
+    writeU32Le(bytes, 0x110U, 22U);
+    writeU32Le(bytes, 0x118U, 0U);
+    writeU32Le(bytes, 0x120U, 0U);
+    writeU32Le(bytes, 0x128U, 0U);
+    writeU32Le(bytes, textureTable, static_cast<std::uint32_t>(textures.size()));
+    for (std::size_t index = 0; index < textures.size(); ++index) {
+        const auto record = textureTable + 4U + index * recordSize;
+        const auto name = "dc_tex_" + std::to_string(index);
+        std::copy(name.begin(), name.end(), bytes.begin() + static_cast<std::ptrdiff_t>(record));
+        writeU32Le(bytes, record + 36U, 0x80000000U);
+    }
+    for (std::size_t index = 0; index < textures.size(); ++index) {
+        const auto record = textureTable + 4U + index * recordSize;
+        const auto prefixSize = (32U - (bytes.size() & 31U)) & 31U;
+        bytes.resize(bytes.size() + prefixSize, 0xCCU);
+        bytes.insert(bytes.end(), textures[index].begin(), textures[index].end());
+        writeU32Le(bytes, record + 40U, static_cast<std::uint32_t>(textures[index].size()));
+    }
+    return bytes;
+}
+
 class TempDirectory final {
 public:
     TempDirectory() : path(makeTempDirectory()) {}
@@ -160,6 +246,155 @@ TEST(SpiceMixDocuments, GvrReplacementPreservesPropertiesAndCanRevert) {
     EXPECT_FALSE(opened.session->dirty());
 }
 
+TEST(SpiceMixDocuments, NewPvrUsesSafeDefaultsAndSupportsTypedReplacement) {
+    TempDirectory temp{};
+    const auto sourcePng = temp.path / "source.png";
+    const auto replacementPng = temp.path / "replacement.png";
+    spice::gvm::image::writePngRgba8(sourcePng, image(8, 8, 80, 30));
+    spice::gvm::image::writePngRgba8(replacementPng, image(16, 16, 25, 140));
+
+    auto created = spice::mix::PvrDocumentSession::createFromPng(sourcePng);
+    ASSERT_TRUE(created.result.ok()) << created.result.message;
+    ASSERT_TRUE(created.session);
+    auto snapshot = created.session->snapshot();
+    EXPECT_EQ(snapshot.pixelFormat, "ARGB4444");
+    EXPECT_EQ(snapshot.dataLayout, "Twiddled");
+    EXPECT_FALSE(snapshot.mipmaps);
+    EXPECT_FALSE(snapshot.hasGlobalIndex);
+    EXPECT_TRUE(snapshot.dirty);
+    ASSERT_TRUE(created.session->preview().has_value());
+
+    const auto sourcePvr = temp.path / "source.pvr";
+    ASSERT_TRUE(created.session->saveAs(sourcePvr).ok());
+    EXPECT_FALSE(created.session->dirty());
+    auto opened = spice::mix::PvrDocumentSession::open(sourcePvr);
+    ASSERT_TRUE(opened.result.ok()) << opened.result.message;
+
+    spice::mix::PvrEncodingOverrides overrides{};
+    overrides.pixelFormat = spice::mix::PvrPixelFormat::RGB565;
+    overrides.dataLayout = spice::mix::PvrDataLayout::VqMipmaps;
+    overrides.globalIndex = {
+        .kind = spice::mix::PvrGlobalIndexKind::Value,
+        .value = 77U,
+    };
+    const auto rejectedDimensions = opened.session->replaceImage(
+        replacementPng, overrides, false);
+    EXPECT_EQ(rejectedDimensions.status, spice::mix::OperationStatus::Failure);
+    EXPECT_FALSE(opened.session->dirty());
+    EXPECT_EQ(opened.session->snapshot().width, 8U);
+
+    ASSERT_TRUE(opened.session->replaceImage(replacementPng, overrides, true).ok());
+    snapshot = opened.session->snapshot();
+    EXPECT_EQ(snapshot.pixelFormat, "RGB565");
+    EXPECT_EQ(snapshot.dataLayout, "VQMipmaps");
+    EXPECT_TRUE(snapshot.mipmaps);
+    EXPECT_TRUE(snapshot.hasGlobalIndex);
+    EXPECT_EQ(snapshot.globalIndex, 77U);
+    EXPECT_EQ(snapshot.width, 16U);
+    EXPECT_TRUE(snapshot.dirty);
+    ASSERT_TRUE(opened.session->revert().ok());
+    EXPECT_FALSE(opened.session->dirty());
+    EXPECT_EQ(opened.session->snapshot().pixelFormat, "ARGB4444");
+}
+
+TEST(SpiceMixDocuments, PvrReplacementFailuresAndCancellationDoNotMutateDocument) {
+    TempDirectory temp{};
+    const auto sourcePng = temp.path / "source.png";
+    spice::gvm::image::writePngRgba8(sourcePng, image(8, 8, 10, 20));
+    auto created = spice::mix::PvrDocumentSession::createFromPng(sourcePng);
+    ASSERT_TRUE(created.result.ok());
+    const auto sourcePvr = temp.path / "source.pvr";
+    ASSERT_TRUE(created.session->saveAs(sourcePvr).ok());
+    auto opened = spice::mix::PvrDocumentSession::open(sourcePvr);
+    ASSERT_TRUE(opened.result.ok());
+
+    spice::mix::PvrEncodingOverrides invalid{};
+    invalid.dataLayout = spice::mix::PvrDataLayout::SmallVq;
+    const auto invalidResult = opened.session->replaceImage(sourcePng, invalid, true);
+    EXPECT_EQ(invalidResult.status, spice::mix::OperationStatus::Failure);
+    EXPECT_FALSE(opened.session->dirty());
+    EXPECT_EQ(opened.session->snapshot().dataLayout, "Twiddled");
+
+    std::stop_source stop{};
+    stop.request_stop();
+    const auto cancelled = opened.session->replaceImage(sourcePng, {}, true,
+        spice::mix::DocumentContext{ .stopToken = stop.get_token() });
+    EXPECT_EQ(cancelled.status, spice::mix::OperationStatus::Cancelled);
+    EXPECT_FALSE(opened.session->dirty());
+
+    const auto invalidDestination = temp.path / "existing_directory";
+    std::filesystem::create_directories(invalidDestination);
+    EXPECT_EQ(opened.session->saveAs(invalidDestination).status,
+        spice::mix::OperationStatus::Failure);
+    for (const auto& entry : std::filesystem::directory_iterator(temp.path)) {
+        EXPECT_EQ(entry.path().filename().string().find(".spicemix-"), std::string::npos);
+    }
+}
+
+TEST(SpiceMixDocuments, PvrReplacementPreservesAndCanRemoveSourceMetadata) {
+    TempDirectory temp{};
+    const auto source = temp.path / "indexed.pvr";
+    writeFile(source, encodePvr(8U, 55U, 4U));
+    const auto replacementPng = temp.path / "replacement.png";
+    spice::gvm::image::writePngRgba8(replacementPng, image(8, 8, 70, 90));
+
+    auto opened = spice::mix::PvrDocumentSession::open(source);
+    ASSERT_TRUE(opened.result.ok()) << opened.result.message;
+    ASSERT_TRUE(opened.session->replaceImage(replacementPng).ok());
+    const auto preservedPath = temp.path / "preserved.pvr";
+    ASSERT_TRUE(opened.session->saveAs(preservedPath).ok());
+    const auto preserved = spice::pvm::parsing::parsePvrTexture(readFile(preservedPath));
+    ASSERT_TRUE(preserved.globalIndex.has_value());
+    EXPECT_EQ(*preserved.globalIndex, 55U);
+    EXPECT_EQ(preserved.gbixTrailingBytes,
+        (std::vector<std::uint8_t>{0x11U, 0x22U, 0x33U, 0x44U, 0x55U}));
+    EXPECT_EQ(preserved.pvrtUnknownHeader,
+        (std::vector<std::uint8_t>{0xA1U, 0xB2U}));
+    EXPECT_EQ(preserved.pixelFormat, spice::pvm::model::PixelFormat::Rgb565);
+    EXPECT_EQ(preserved.dataLayout, spice::pvm::model::DataLayout::Twiddled);
+
+    spice::mix::PvrEncodingOverrides removeIndex{};
+    removeIndex.globalIndex.kind = spice::mix::PvrGlobalIndexKind::None;
+    ASSERT_TRUE(opened.session->replaceImage(replacementPng, removeIndex).ok());
+    EXPECT_FALSE(opened.session->snapshot().hasGlobalIndex);
+}
+
+TEST(SpiceMixDocuments, PvrDocumentMapsEveryPromotedFormatAndLayoutOverride) {
+    TempDirectory temp{};
+    const auto png = temp.path / "source.png";
+    spice::gvm::image::writePngRgba8(png, image(16, 16, 45, 85));
+    auto created = spice::mix::PvrDocumentSession::createFromPng(png);
+    ASSERT_TRUE(created.result.ok()) << created.result.message;
+
+    const std::pair<spice::mix::PvrPixelFormat, const char*> formats[] = {
+        { spice::mix::PvrPixelFormat::ARGB1555, "ARGB1555" },
+        { spice::mix::PvrPixelFormat::RGB565, "RGB565" },
+        { spice::mix::PvrPixelFormat::ARGB4444, "ARGB4444" },
+    };
+    const std::pair<spice::mix::PvrDataLayout, const char*> layouts[] = {
+        { spice::mix::PvrDataLayout::Twiddled, "Twiddled" },
+        { spice::mix::PvrDataLayout::TwiddledMipmaps, "TwiddledMipmaps" },
+        { spice::mix::PvrDataLayout::Vq, "VQ" },
+        { spice::mix::PvrDataLayout::VqMipmaps, "VQMipmaps" },
+        { spice::mix::PvrDataLayout::Rectangle, "Rectangle" },
+        { spice::mix::PvrDataLayout::SmallVq, "SmallVQ" },
+        { spice::mix::PvrDataLayout::SmallVqMipmaps, "SmallVQMipmaps" },
+        { spice::mix::PvrDataLayout::TwiddledMipmapsDma, "TwiddledMipmapsDMA" },
+    };
+    for (const auto& [format, formatName] : formats) {
+        for (const auto& [layout, layoutName] : layouts) {
+            spice::mix::PvrEncodingOverrides overrides{};
+            overrides.pixelFormat = format;
+            overrides.dataLayout = layout;
+            const auto replaced = created.session->replaceImage(png, overrides, true);
+            ASSERT_TRUE(replaced.ok()) << formatName << '/' << layoutName << ": " << replaced.message;
+            const auto snapshot = created.session->snapshot();
+            EXPECT_EQ(snapshot.pixelFormat, formatName);
+            EXPECT_EQ(snapshot.dataLayout, layoutName);
+        }
+    }
+}
+
 TEST(SpiceMixDocuments, MldStagesMultipleGvrReplacementsAndProtectsOriginal) {
     TempDirectory temp{};
     const auto source = temp.path / "two_textures.mld";
@@ -189,6 +424,101 @@ TEST(SpiceMixDocuments, MldStagesMultipleGvrReplacementsAndProtectsOriginal) {
     auto reparsed = spice::mix::MldDocumentSession::open(output);
     ASSERT_TRUE(reparsed.result.ok()) << reparsed.result.message;
     EXPECT_EQ(reparsed.session->textures().size(), 2U);
+}
+
+TEST(SpiceMixDocuments, MldStagesAndSavesMultiplePvrReplacements) {
+    TempDirectory temp{};
+    const auto originalBytes = makeDreamcastTextureMld({
+        encodePvr(8U, 101U, 3U), encodePvr(8U, 102U, 9U) });
+    const auto source = temp.path / "dreamcast.mld";
+    writeFile(source, originalBytes);
+    const auto firstPng = temp.path / "first.png";
+    const auto secondPng = temp.path / "second.png";
+    spice::gvm::image::writePngRgba8(firstPng, image(8, 8, 35, 70));
+    spice::gvm::image::writePngRgba8(secondPng, image(16, 16, 95, 20));
+
+    auto opened = spice::mix::MldDocumentSession::open(source);
+    ASSERT_TRUE(opened.result.ok()) << opened.result.message;
+    ASSERT_TRUE(opened.session);
+    auto textures = opened.session->textures();
+    ASSERT_EQ(textures.size(), 2U);
+    EXPECT_EQ(textures[0].encoding, spice::mix::TextureEncodingKind::Pvr);
+    EXPECT_EQ(textures[0].format, "RGB565");
+    EXPECT_EQ(textures[0].paletteFormat, "Twiddled");
+    ASSERT_TRUE(opened.session->replacePvrTexture(0U, firstPng).ok());
+    EXPECT_EQ(opened.session->textures()[0].globalIndex, 101U);
+
+    spice::mix::PvrEncodingOverrides overrides{};
+    overrides.pixelFormat = spice::mix::PvrPixelFormat::ARGB4444;
+    overrides.dataLayout = spice::mix::PvrDataLayout::VqMipmaps;
+    overrides.globalIndex = {
+        .kind = spice::mix::PvrGlobalIndexKind::Value,
+        .value = 202U,
+    };
+    EXPECT_EQ(opened.session->replacePvrTexture(1U, secondPng, overrides, false).status,
+        spice::mix::OperationStatus::Failure);
+    EXPECT_FALSE(opened.session->textures()[1].dirty);
+    ASSERT_TRUE(opened.session->replacePvrTexture(1U, secondPng, overrides, true).ok());
+    textures = opened.session->textures();
+    EXPECT_TRUE(textures[0].dirty);
+    EXPECT_TRUE(textures[1].dirty);
+    EXPECT_EQ(textures[1].format, "ARGB4444");
+    EXPECT_EQ(textures[1].paletteFormat, "VQMipmaps");
+    EXPECT_EQ(textures[1].globalIndex, 202U);
+    EXPECT_EQ(textures[1].width, 16U);
+
+    const auto blenderPath = temp.path / "staged.json";
+    ASSERT_TRUE(opened.session->exportBlenderIrJson(blenderPath).ok());
+    const auto blenderJson = readText(blenderPath);
+    EXPECT_NE(blenderJson.find("\"encodedFormat\":\"pvr\""), std::string::npos);
+    EXPECT_NE(blenderJson.find("\"width\":16"), std::string::npos);
+
+    const auto output = temp.path / "saved.mld";
+    ASSERT_TRUE(opened.session->saveAs(output).ok());
+    EXPECT_EQ(readFile(source), originalBytes);
+    auto reparsed = spice::mix::MldDocumentSession::open(output);
+    ASSERT_TRUE(reparsed.result.ok()) << reparsed.result.message;
+    const auto savedTextures = reparsed.session->textures();
+    ASSERT_EQ(savedTextures.size(), 2U);
+    EXPECT_EQ(savedTextures[0].globalIndex, 101U);
+    EXPECT_EQ(savedTextures[1].globalIndex, 202U);
+    EXPECT_EQ(savedTextures[1].width, 16U);
+    EXPECT_EQ(savedTextures[1].paletteFormat, "VQMipmaps");
+}
+
+TEST(SpiceMixDocuments, RealDreamcastMldPvrReplacementRoundTripsReadOnly) {
+    const std::filesystem::path source{
+        R"(D:\SoADC\SoA(Eu)Disc1Assets\BATTLE\BTLCURSOR.MLD)" };
+    if (!std::filesystem::is_regular_file(source)) {
+        GTEST_SKIP() << "Dreamcast MLD corpus is not available on this machine";
+    }
+    TempDirectory temp{};
+    auto opened = spice::mix::MldDocumentSession::open(source);
+    ASSERT_TRUE(opened.result.ok()) << opened.result.message;
+    ASSERT_TRUE(opened.session);
+    const auto textures = opened.session->textures();
+    ASSERT_FALSE(textures.empty());
+    ASSERT_EQ(textures.front().encoding, spice::mix::TextureEncodingKind::Pvr);
+    const auto preview = opened.session->texturePreview(0U);
+    ASSERT_TRUE(preview.has_value());
+    spice::gvm::model::RgbaImage replacement{
+        .width = preview->width,
+        .height = preview->height,
+        .rgba8 = preview->rgba8,
+    };
+    if (!replacement.rgba8.empty()) replacement.rgba8.front() ^= 0x1FU;
+    const auto png = temp.path / "replacement.png";
+    spice::gvm::image::writePngRgba8(png, replacement);
+    ASSERT_TRUE(opened.session->replacePvrTexture(0U, png).ok());
+    const auto output = temp.path / "BTLCURSOR_edited.MLD";
+    ASSERT_TRUE(opened.session->saveAs(output).ok());
+    auto reparsed = spice::mix::MldDocumentSession::open(output);
+    ASSERT_TRUE(reparsed.result.ok()) << reparsed.result.message;
+    ASSERT_EQ(reparsed.session->textures().size(), textures.size());
+    EXPECT_EQ(reparsed.session->textures().front().format, textures.front().format);
+    EXPECT_EQ(reparsed.session->textures().front().paletteFormat, textures.front().paletteFormat);
+    EXPECT_EQ(reparsed.session->textures().front().width, textures.front().width);
+    EXPECT_EQ(reparsed.session->textures().front().height, textures.front().height);
 }
 
 TEST(SpiceMixDocuments, MldExportsCurrentDocumentWithoutChangingDirtyState) {
