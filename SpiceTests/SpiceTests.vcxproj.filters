@@ -28,6 +28,7 @@
     <ClCompile Include="test_sa3dport_stage5.cpp" />
     <ClCompile Include="test_spiceroot.cpp" />
     <ClCompile Include="test_spice_grinder_cli.cpp" />
+    <ClCompile Include="test_spice_mix_documents.cpp" />
     <ClCompile Include="..\SpiceGrinder\Cli\CliParser.cpp">
       <Link>SpiceGrinder\CliParser.cpp</Link>
     </ClCompile>

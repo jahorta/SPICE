@@ -13,8 +13,8 @@ Qt desktop frontend for Skies of Arcadia content tooling.
   particular frontend.
 - `SpiceGrinder` is the command-line frontend. It parses CLI arguments, runs a
   SpiceMix request, and renders operation events to the console.
-- `SpiceRack` is the Qt desktop frontend. Its first version is a launchable GUI
-  shell over SpiceMix; interactive operation forms will be added separately.
+- `SpiceRack` is the Qt desktop frontend. Its first workbenches inspect MLD
+  documents and edit standalone or embedded GVR textures through SpiceMix.
 
 SpiceGrinder and SpiceRack are separate executables. Running SpiceGrinder with
 no arguments prints CLI help and does not launch the GUI.
@@ -76,14 +76,27 @@ outputs are always explicit; use `<command> --help` for command-specific usage.
 
 ## GUI
 
-Launch the desktop shell with:
+Launch the desktop application with:
 
 ```powershell
 .\bin\x64\Debug\SpiceRack.exe
 ```
 
+SpiceRack uses closable document tabs. The MLD workbench exposes overview,
+entry, texture, and diagnostic pages; GVR textures can be replaced from PNG and
+staged across multiple entries before saving to a new MLD. PVR textures are
+read-only but support preview, native extraction, and PNG export. The standalone
+GVR workbench can open GVR files or create a new RGBA8 GVR from PNG. Advanced
+controls expose format, palette, mipmap, global-index, and AKLZ wrapper choices.
+
 For automated launch validation, `SpiceRack.exe --smoke-test` initializes and
-shows the main window, then exits immediately.
+shows the main window, then exits. Supplying an MLD or GVR path waits for the
+background document load and returns a failure code if the workbench cannot be
+created:
+
+```powershell
+.\bin\x64\Debug\SpiceRack.exe --smoke-test <document.mld-or-gvr>
+```
 
 ## Breaking project-name migration
 
