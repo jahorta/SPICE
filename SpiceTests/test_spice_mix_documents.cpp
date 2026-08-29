@@ -10,7 +10,9 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <span>
+#include <stop_token>
 #include <string>
 #include <vector>
 
@@ -26,6 +28,11 @@ void writeU32Be(std::vector<std::uint8_t>& bytes, const std::size_t offset, cons
 void writeFile(const std::filesystem::path& path, const std::span<const std::uint8_t> bytes) {
     std::ofstream output(path, std::ios::binary | std::ios::trunc);
     output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+}
+
+std::string readText(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(input), {});
 }
 
 std::filesystem::path makeTempDirectory() {
@@ -182,6 +189,77 @@ TEST(SpiceMixDocuments, MldStagesMultipleGvrReplacementsAndProtectsOriginal) {
     auto reparsed = spice::mix::MldDocumentSession::open(output);
     ASSERT_TRUE(reparsed.result.ok()) << reparsed.result.message;
     EXPECT_EQ(reparsed.session->textures().size(), 2U);
+}
+
+TEST(SpiceMixDocuments, MldExportsCurrentDocumentWithoutChangingDirtyState) {
+    TempDirectory temp{};
+    const auto source = temp.path / "a101b_DC.mld";
+    writeFile(source, makeTwoTextureMld());
+    auto opened = spice::mix::MldDocumentSession::open(source);
+    ASSERT_TRUE(opened.result.ok()) << opened.result.message;
+    ASSERT_TRUE(opened.session);
+
+    std::vector<spice::mix::OperationEvent> events{};
+    const spice::mix::DocumentContext context{
+        .report = [&events](const auto& event) { events.push_back(event); },
+    };
+    const auto cleanBlenderPath = temp.path / "clean.json";
+    const auto entryPath = temp.path / "a101b_DC.mld.entries.json";
+    ASSERT_TRUE(opened.session->exportBlenderIrJson(cleanBlenderPath, context).ok());
+    ASSERT_TRUE(opened.session->exportEntryListJson(entryPath, context).ok());
+    EXPECT_FALSE(opened.session->dirty());
+    ASSERT_TRUE(std::filesystem::is_regular_file(cleanBlenderPath));
+    ASSERT_TRUE(std::filesystem::is_regular_file(entryPath));
+
+    const auto entryJson = readText(entryPath);
+    EXPECT_NE(entryJson.find("\"schema\": \"spice_mld_entry_list_v1\""), std::string::npos);
+    EXPECT_NE(entryJson.find("\"source\": \""), std::string::npos);
+    EXPECT_NE(entryJson.find("\"entry_count\": 1"), std::string::npos);
+    EXPECT_NE(entryJson.find("\"entryID\": 7"), std::string::npos);
+    EXPECT_NE(entryJson.find("\"tableID\": 9"), std::string::npos);
+    EXPECT_NE(entryJson.find("\"texture_names\": ["), std::string::npos);
+
+    const auto replacementPng = temp.path / "replacement.png";
+    spice::gvm::image::writePngRgba8(replacementPng, image(8, 8, 45, 90));
+    ASSERT_TRUE(opened.session->replaceGvrTexture(0U, replacementPng, {}, true).ok());
+    ASSERT_TRUE(opened.session->dirty());
+    const auto stagedBlenderPath = temp.path / "staged.json";
+    ASSERT_TRUE(opened.session->exportBlenderIrJson(stagedBlenderPath, context).ok());
+    EXPECT_TRUE(opened.session->dirty());
+    const auto stagedJson = readText(stagedBlenderPath);
+    EXPECT_NE(stagedJson.find("\"textureName\":\"first\""), std::string::npos);
+    EXPECT_NE(stagedJson.find("\"width\":8"), std::string::npos);
+    EXPECT_NE(stagedJson.find("\"height\":8"), std::string::npos);
+    EXPECT_TRUE(std::any_of(events.begin(), events.end(), [](const auto& event) {
+        return event.level == spice::mix::EventLevel::Progress;
+    }));
+    EXPECT_TRUE(std::any_of(events.begin(), events.end(), [](const auto& event) {
+        return event.level == spice::mix::EventLevel::Info;
+    }));
+}
+
+TEST(SpiceMixDocuments, MldExportsHonorCancellationAndRemoveFailedTemporaryFiles) {
+    TempDirectory temp{};
+    const auto source = temp.path / "source.mld";
+    writeFile(source, makeTwoTextureMld());
+    auto opened = spice::mix::MldDocumentSession::open(source);
+    ASSERT_TRUE(opened.result.ok()) << opened.result.message;
+
+    std::stop_source stop{};
+    stop.request_stop();
+    const auto cancelledPath = temp.path / "cancelled.json";
+    const auto cancelled = opened.session->exportBlenderIrJson(cancelledPath,
+        spice::mix::DocumentContext{ .stopToken = stop.get_token() });
+    EXPECT_EQ(cancelled.status, spice::mix::OperationStatus::Cancelled);
+    EXPECT_FALSE(std::filesystem::exists(cancelledPath));
+
+    const auto invalidTarget = temp.path / "existing_directory";
+    std::filesystem::create_directories(invalidTarget);
+    const auto failed = opened.session->exportEntryListJson(invalidTarget);
+    EXPECT_EQ(failed.status, spice::mix::OperationStatus::Failure);
+    for (const auto& entry : std::filesystem::directory_iterator(temp.path)) {
+        EXPECT_EQ(entry.path().filename().string().find(".spicemix-"), std::string::npos);
+    }
 }
 
 TEST(SpiceMixDocuments, CancelledOpenDoesNotCreateSession) {

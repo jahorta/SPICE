@@ -124,7 +124,13 @@ std::vector<std::uint8_t> makeSyntheticGobj(
     return bytes;
 }
 
-std::vector<std::uint8_t> makeSyntheticGrnd() {
+std::vector<std::uint8_t> makeSyntheticGrnd(
+    const Endian endian = Endian::Big,
+    const float translationX = 0.0F,
+    const float translationY = 0.0F,
+    const float translationZ = 0.0F,
+    const float gridOriginX = 0.0F,
+    const float gridOriginZ = 0.0F) {
     constexpr std::size_t innerHeader = 0x10U;
     constexpr std::size_t triangleSetsOffset = 0x40U;
     constexpr std::size_t streamOffset = 0x60U;
@@ -136,41 +142,46 @@ std::vector<std::uint8_t> makeSyntheticGrnd() {
 
     std::vector<std::uint8_t> bytes(declaredSize, 0U);
     writeTag(bytes, 0U, "GRND");
-    writeU32(bytes, 4U, static_cast<std::uint32_t>(declaredSize), Endian::Big);
-    writeU32(bytes, innerHeader, static_cast<std::uint32_t>(triangleSetsOffset - innerHeader), Endian::Big);
-    writeU32(bytes, innerHeader + 4U, static_cast<std::uint32_t>(quadRegistryOffset - innerHeader), Endian::Big);
-    writeU16(bytes, innerHeader + 0x10U, 1U, Endian::Big);
-    writeU16(bytes, innerHeader + 0x12U, 1U, Endian::Big);
-    writeU16(bytes, innerHeader + 0x14U, 1U, Endian::Big);
-    writeU16(bytes, innerHeader + 0x16U, 1U, Endian::Big);
-    writeU16(bytes, innerHeader + 0x18U, 1U, Endian::Big);
-    writeU16(bytes, innerHeader + 0x1AU, 1U, Endian::Big);
+    writeU32(bytes, 4U, static_cast<std::uint32_t>(declaredSize), endian);
+    writeU32(bytes, innerHeader, static_cast<std::uint32_t>(triangleSetsOffset - innerHeader), endian);
+    writeU32(bytes, innerHeader + 4U, static_cast<std::uint32_t>(quadRegistryOffset - innerHeader), endian);
+    writeF32(bytes, innerHeader + 8U, gridOriginX, endian);
+    writeF32(bytes, innerHeader + 0x0CU, gridOriginZ, endian);
+    writeU16(bytes, innerHeader + 0x10U, 1U, endian);
+    writeU16(bytes, innerHeader + 0x12U, 1U, endian);
+    writeU16(bytes, innerHeader + 0x14U, 1U, endian);
+    writeU16(bytes, innerHeader + 0x16U, 1U, endian);
+    writeU16(bytes, innerHeader + 0x18U, 1U, endian);
+    writeU16(bytes, innerHeader + 0x1AU, 1U, endian);
 
+    writeF32(bytes, triangleSetsOffset, translationX, endian);
+    writeF32(bytes, triangleSetsOffset + 4U, translationY, endian);
+    writeF32(bytes, triangleSetsOffset + 8U, translationZ, endian);
     writeU32(bytes, triangleSetsOffset + 0x0CU,
-        static_cast<std::uint32_t>(vertexOffset - (triangleSetsOffset + 0x0CU)), Endian::Big);
+        static_cast<std::uint32_t>(vertexOffset - (triangleSetsOffset + 0x0CU)), endian);
     writeU32(bytes, triangleSetsOffset + 0x10U,
-        static_cast<std::uint32_t>(streamOffset - (triangleSetsOffset + 0x10U)), Endian::Big);
-    writeU32(bytes, triangleSetsOffset + 0x14U, 1U, Endian::Big);
+        static_cast<std::uint32_t>(streamOffset - (triangleSetsOffset + 0x10U)), endian);
+    writeU32(bytes, triangleSetsOffset + 0x14U, 1U, endian);
 
     constexpr std::array<std::uint16_t, 3> floatIndices{ 0U, 6U, 12U };
     constexpr std::array<std::uint16_t, 3> flags{ 0x0001U, 0x7FFFU, 0x800AU };
     for (std::size_t i = 0; i < 3U; ++i) {
-        writeU16(bytes, streamOffset + (i * 4U), floatIndices[i], Endian::Big);
-        writeU16(bytes, streamOffset + (i * 4U) + 2U, flags[i], Endian::Big);
+        writeU16(bytes, streamOffset + (i * 4U), floatIndices[i], endian);
+        writeU16(bytes, streamOffset + (i * 4U) + 2U, flags[i], endian);
         const std::size_t recordOffset = vertexOffset + (i * 24U);
-        writeF32(bytes, recordOffset + 0U, static_cast<float>(i), Endian::Big);
-        writeF32(bytes, recordOffset + 4U, static_cast<float>(i == 1U), Endian::Big);
-        writeF32(bytes, recordOffset + 8U, static_cast<float>(i == 2U), Endian::Big);
-        writeF32(bytes, recordOffset + 12U, 0.0F, Endian::Big);
-        writeF32(bytes, recordOffset + 16U, 1.0F, Endian::Big);
-        writeF32(bytes, recordOffset + 20U, 0.0F, Endian::Big);
+        writeF32(bytes, recordOffset + 0U, static_cast<float>(i), endian);
+        writeF32(bytes, recordOffset + 4U, static_cast<float>(i == 1U), endian);
+        writeF32(bytes, recordOffset + 8U, static_cast<float>(i == 2U), endian);
+        writeF32(bytes, recordOffset + 12U, 0.0F, endian);
+        writeF32(bytes, recordOffset + 16U, 1.0F, endian);
+        writeF32(bytes, recordOffset + 20U, 0.0F, endian);
     }
 
-    writeU32(bytes, quadTableOffset, 1U, Endian::Big);
+    writeU32(bytes, quadTableOffset, 1U, endian);
     writeU32(bytes, quadTableOffset + 4U,
-        static_cast<std::uint32_t>(refListOffset - (quadTableOffset + 4U)), Endian::Big);
-    writeU16(bytes, refListOffset, 0U, Endian::Big);
-    writeU16(bytes, refListOffset + 2U, 0U, Endian::Big);
+        static_cast<std::uint32_t>(refListOffset - (quadTableOffset + 4U)), endian);
+    writeU16(bytes, refListOffset, 0U, endian);
+    writeU16(bytes, refListOffset + 2U, 0U, endian);
     return bytes;
 }
 
@@ -1154,6 +1165,44 @@ TEST(GrndParser, PreservesRawTriangleMetadataAcrossWindingReversal) {
         (std::array<std::uint16_t, 3>{ 0x0001U, 0x7FFFU, 0x800AU }));
 }
 
+TEST(GrndParser, BakesTriangleSetTranslationIntoCanonicalMeshForBothEndians) {
+    for (const auto endian : { Endian::Big, Endian::Little }) {
+        const auto bytes = makeSyntheticGrnd(endian, 10.0F, 20.0F, -30.0F, -100.5F, 200.25F);
+        const auto decoded = spice::mld::parsing::GrndParser{}.decode(bytes, 0x4000U, endian);
+
+        ASSERT_TRUE(decoded.decoded);
+        ASSERT_EQ(decoded.data.triangleSets.size(), 1U);
+        const auto& sourceSet = decoded.data.triangleSets.front();
+        EXPECT_FLOAT_EQ(sourceSet.localToResourceTranslation.x, 10.0F);
+        EXPECT_FLOAT_EQ(sourceSet.localToResourceTranslation.y, 20.0F);
+        EXPECT_FLOAT_EQ(sourceSet.localToResourceTranslation.z, -30.0F);
+        EXPECT_FLOAT_EQ(decoded.data.gridOriginX, -100.5F);
+        EXPECT_FLOAT_EQ(decoded.data.gridOriginZ, 200.25F);
+
+        ASSERT_EQ(sourceSet.verticesByFloatIndex.size(), 3U);
+        const auto& localVertex = sourceSet.verticesByFloatIndex.at(0U);
+        EXPECT_FLOAT_EQ(localVertex.position.x, 0.0F);
+        EXPECT_FLOAT_EQ(localVertex.position.y, 0.0F);
+        EXPECT_FLOAT_EQ(localVertex.position.z, 0.0F);
+
+        ASSERT_EQ(decoded.mesh.vertices.size(), 3U);
+        EXPECT_FLOAT_EQ(decoded.mesh.vertices[0].position.x, 10.0F);
+        EXPECT_FLOAT_EQ(decoded.mesh.vertices[0].position.y, 20.0F);
+        EXPECT_FLOAT_EQ(decoded.mesh.vertices[0].position.z, -30.0F);
+        EXPECT_FLOAT_EQ(decoded.mesh.vertices[1].position.x, 11.0F);
+        EXPECT_FLOAT_EQ(decoded.mesh.vertices[1].position.y, 21.0F);
+        EXPECT_FLOAT_EQ(decoded.mesh.vertices[1].position.z, -30.0F);
+        EXPECT_FLOAT_EQ(decoded.mesh.vertices[2].position.x, 12.0F);
+        EXPECT_FLOAT_EQ(decoded.mesh.vertices[2].position.y, 20.0F);
+        EXPECT_FLOAT_EQ(decoded.mesh.vertices[2].position.z, -29.0F);
+        for (const auto& vertex : decoded.mesh.vertices) {
+            EXPECT_FLOAT_EQ(vertex.normal.x, 0.0F);
+            EXPECT_FLOAT_EQ(vertex.normal.y, 1.0F);
+            EXPECT_FLOAT_EQ(vertex.normal.z, 0.0F);
+        }
+    }
+}
+
 TEST(BlenderIrJsonExporter, EmitsRawTriangleMetadataAndVertexUserAttributesWithoutSemantics) {
     spice::mld::model::BlenderIrScene scene{};
     spice::mld::model::BlenderIrMesh mesh{};
@@ -1174,4 +1223,49 @@ TEST(BlenderIrJsonExporter, EmitsRawTriangleMetadataAndVertexUserAttributesWitho
     EXPECT_EQ(json.find("collisionTriangles"), std::string::npos);
     EXPECT_EQ(json.find("selectorLow15"), std::string::npos);
     EXPECT_EQ(json.find("encounterTableId"), std::string::npos);
+}
+
+TEST(MldEntryListJsonExporter, PreservesDetailedSchemaFieldsAndEscapesStrings) {
+    spice::mld::parsing::ParsedEntryListItem entry{};
+    entry.tableIndex = 4U;
+    entry.entryId = 17U;
+    entry.tblId = -3;
+    entry.fxnName = "function\"\\line\n\tend";
+    entry.objectCount = 1U;
+    entry.groundCount = 2U;
+    entry.motionCount = 3U;
+    entry.textureCount = 2U;
+    entry.texturesPointer = 0x1234ABCDU;
+    entry.groundLinks = { 1U, 2U };
+    entry.paramList2 = { 3U };
+    entry.functionParameters = { 4U, 5U };
+    entry.objectAddresses = { 0x100U };
+    entry.groundAddresses = { 0x200U, 0x204U };
+    entry.motionAddresses = { 0x300U };
+    entry.textureNames = { "plain", "quoted\"\\name" };
+
+    const std::array entries{ entry };
+    const auto json = spice::mld::exporting::MldEntryListJsonExporter{}.toJson(
+        std::filesystem::path("C:\\fixtures\\a101b_DC.mld"), entries);
+
+    EXPECT_NE(json.find("\"schema\": \"spice_mld_entry_list_v1\""), std::string::npos);
+    EXPECT_NE(json.find("\"source\": \"C:\\\\fixtures\\\\a101b_DC.mld\""), std::string::npos);
+    EXPECT_NE(json.find("\"entry_count\": 1"), std::string::npos);
+    EXPECT_NE(json.find("\"table_index\": 4"), std::string::npos);
+    EXPECT_NE(json.find("\"entryID\": 17"), std::string::npos);
+    EXPECT_NE(json.find("\"tableID\": -3"), std::string::npos);
+    EXPECT_NE(json.find("\"function\": \"function\\\"\\\\line\\n\\tend\""), std::string::npos);
+    EXPECT_NE(json.find("\"object_count\": 1"), std::string::npos);
+    EXPECT_NE(json.find("\"ground_count\": 2"), std::string::npos);
+    EXPECT_NE(json.find("\"motion_count\": 3"), std::string::npos);
+    EXPECT_NE(json.find("\"texture_count\": 2"), std::string::npos);
+    EXPECT_NE(json.find("\"textures_pointer\": 305441741"), std::string::npos);
+    EXPECT_NE(json.find("\"textures_pointer_hex\": \"0x1234abcd\""), std::string::npos);
+    EXPECT_NE(json.find("\"ground_links\": [1, 2]"), std::string::npos);
+    EXPECT_NE(json.find("\"param_list2\": [3]"), std::string::npos);
+    EXPECT_NE(json.find("\"function_parameters\": [4, 5]"), std::string::npos);
+    EXPECT_NE(json.find("\"object_addresses\": [256]"), std::string::npos);
+    EXPECT_NE(json.find("\"ground_addresses\": [512, 516]"), std::string::npos);
+    EXPECT_NE(json.find("\"motion_addresses\": [768]"), std::string::npos);
+    EXPECT_NE(json.find("\"texture_names\": [\"plain\", \"quoted\\\"\\\\name\"]"), std::string::npos);
 }

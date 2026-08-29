@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <sstream>
 #include <span>
 #include <vector>
@@ -57,8 +58,9 @@ void writeU32(std::vector<std::uint8_t>& bytes, const std::size_t offset,
     }
 }
 
-void writeF32(std::vector<std::uint8_t>& bytes, const std::size_t offset, const float value) {
-    writeU32(bytes, offset, std::bit_cast<std::uint32_t>(value));
+void writeF32(std::vector<std::uint8_t>& bytes, const std::size_t offset, const float value,
+    const Endian endian = Endian::Big) {
+    writeU32(bytes, offset, std::bit_cast<std::uint32_t>(value), endian);
 }
 
 void writeTag(std::vector<std::uint8_t>& bytes, const std::size_t offset, const char* tag) {
@@ -114,7 +116,9 @@ std::vector<std::uint8_t> makeBaseMld(const std::uint32_t resourceAddress = 0U,
     return bytes;
 }
 
-std::vector<std::uint8_t> makeGrndMld() {
+std::vector<std::uint8_t> makeGrndMld(
+    const std::array<float, 3> translation = {},
+    const std::array<float, 2> gridOrigin = {}) {
     constexpr std::uint32_t address = 0x180U;
     auto bytes = makeBaseMld(address, false);
     constexpr std::size_t sets = 0x40U;
@@ -128,12 +132,17 @@ std::vector<std::uint8_t> makeGrndMld() {
     writeU32(bytes, address + 4U, static_cast<std::uint32_t>(size));
     writeU32(bytes, address + 0x10U, static_cast<std::uint32_t>(sets - 0x10U));
     writeU32(bytes, address + 0x14U, static_cast<std::uint32_t>(registry - 0x10U));
+    writeF32(bytes, address + 0x18U, gridOrigin[0]);
+    writeF32(bytes, address + 0x1CU, gridOrigin[1]);
     writeU16(bytes, address + 0x20U, 1U);
     writeU16(bytes, address + 0x22U, 1U);
     writeU16(bytes, address + 0x24U, 10U);
     writeU16(bytes, address + 0x26U, 10U);
     writeU16(bytes, address + 0x28U, 1U);
     writeU16(bytes, address + 0x2AU, 1U);
+    writeF32(bytes, address + sets, translation[0]);
+    writeF32(bytes, address + sets + 4U, translation[1]);
+    writeF32(bytes, address + sets + 8U, translation[2]);
     writeU32(bytes, address + sets + 0x0CU, static_cast<std::uint32_t>(vertices - (sets + 0x0CU)));
     writeU32(bytes, address + sets + 0x10U, static_cast<std::uint32_t>(stream - (sets + 0x10U)));
     writeU32(bytes, address + sets + 0x14U, 1U);
@@ -208,6 +217,24 @@ std::filesystem::path findMldFixture(const std::string& name) {
 std::vector<std::uint8_t> readBytes(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(input), {});
+}
+
+template <typename VertexRange>
+std::array<float, 6> positionBounds(const VertexRange& vertices) {
+    std::array<float, 6> bounds{
+        std::numeric_limits<float>::max(), std::numeric_limits<float>::lowest(),
+        std::numeric_limits<float>::max(), std::numeric_limits<float>::lowest(),
+        std::numeric_limits<float>::max(), std::numeric_limits<float>::lowest(),
+    };
+    for (const auto& vertex : vertices) {
+        bounds[0] = std::min(bounds[0], vertex.position.x);
+        bounds[1] = std::max(bounds[1], vertex.position.x);
+        bounds[2] = std::min(bounds[2], vertex.position.y);
+        bounds[3] = std::max(bounds[3], vertex.position.y);
+        bounds[4] = std::min(bounds[4], vertex.position.z);
+        bounds[5] = std::max(bounds[5], vertex.position.z);
+    }
+    return bounds;
 }
 
 } // namespace
@@ -293,6 +320,56 @@ TEST(MldCanonical, WriterRebuildsEditedGrndTopology) {
     EXPECT_EQ(reparsed.groundResources.at(reparsed.entries[0].entry.groundAddresses->values[0]).grnd->mesh.indices.size(), 6U);
 }
 
+TEST(MldCanonical, WriterPreservesBakedGrndPlacementWhenCanonicalizingToZeroTranslation) {
+    const auto source = makeGrndMld({ 10.0F, 20.0F, -30.0F }, { -100.5F, 200.25F });
+    auto file = MldParser{}.parseBytes(source);
+    auto& data = *file.groundResources.at(0x180U).grnd;
+    ASSERT_EQ(data.triangleSets.size(), 1U);
+    EXPECT_FLOAT_EQ(data.triangleSets[0].localToResourceTranslation.x, 10.0F);
+    EXPECT_FLOAT_EQ(data.triangleSets[0].verticesByFloatIndex.at(0U).position.x, 0.0F);
+    ASSERT_EQ(data.mesh.vertices.size(), 3U);
+    EXPECT_FLOAT_EQ(data.mesh.vertices[0].position.x, 10.0F);
+    EXPECT_FLOAT_EQ(data.mesh.vertices[0].position.y, 20.0F);
+    EXPECT_FLOAT_EQ(data.mesh.vertices[0].position.z, -30.0F);
+
+    const auto unchanged = MldFileWriter{}.write(file);
+    ASSERT_TRUE(unchanged.ok());
+    EXPECT_EQ(unchanged.bytes, source);
+
+    const auto converted = MldFileWriter{}.write(file, spice::mld::exporting::MldWriteOptions{
+        .platform = spice::mld::model::TargetPlatform::Dreamcast,
+    });
+    ASSERT_TRUE(converted.ok());
+    const auto convertedFile = MldParser{}.parseBytes(converted.bytes);
+    const auto convertedAddress = convertedFile.entries[0].entry.groundAddresses->values[0];
+    const auto& convertedData = *convertedFile.groundResources.at(convertedAddress).grnd;
+    ASSERT_EQ(convertedData.triangleSets.size(), 1U);
+    EXPECT_FLOAT_EQ(convertedData.triangleSets[0].localToResourceTranslation.x, 0.0F);
+    EXPECT_FLOAT_EQ(convertedData.triangleSets[0].localToResourceTranslation.y, 0.0F);
+    EXPECT_FLOAT_EQ(convertedData.triangleSets[0].localToResourceTranslation.z, 0.0F);
+    EXPECT_EQ(positionBounds(convertedData.mesh.vertices), positionBounds(data.mesh.vertices));
+    EXPECT_FLOAT_EQ(convertedData.gridOriginX, -100.5F);
+    EXPECT_FLOAT_EQ(convertedData.gridOriginZ, 200.25F);
+
+    data.mesh.triangleMetadata[0].rawU16[0] ^= 1U;
+    const auto changed = MldFileWriter{}.write(file);
+    ASSERT_TRUE(changed.ok());
+    const auto reparsed = MldParser{}.parseBytes(changed.bytes);
+    const auto address = reparsed.entries[0].entry.groundAddresses->values[0];
+    const auto& rebuilt = *reparsed.groundResources.at(address).grnd;
+    ASSERT_EQ(rebuilt.triangleSets.size(), 1U);
+    EXPECT_FLOAT_EQ(rebuilt.triangleSets[0].localToResourceTranslation.x, 0.0F);
+    EXPECT_FLOAT_EQ(rebuilt.triangleSets[0].localToResourceTranslation.y, 0.0F);
+    EXPECT_FLOAT_EQ(rebuilt.triangleSets[0].localToResourceTranslation.z, 0.0F);
+    EXPECT_FLOAT_EQ(rebuilt.gridOriginX, -100.5F);
+    EXPECT_FLOAT_EQ(rebuilt.gridOriginZ, 200.25F);
+    ASSERT_EQ(rebuilt.mesh.vertices.size(), 3U);
+    EXPECT_FLOAT_EQ(rebuilt.mesh.vertices[0].position.x, 10.0F);
+    EXPECT_FLOAT_EQ(rebuilt.mesh.vertices[0].position.y, 20.0F);
+    EXPECT_FLOAT_EQ(rebuilt.mesh.vertices[0].position.z, -30.0F);
+    EXPECT_EQ(rebuilt.mesh.triangleMetadata[0].rawU16[0], data.mesh.triangleMetadata[0].rawU16[0]);
+}
+
 TEST(MldCanonical, GrndGridHelperAssignsEveryTriangleForWriting) {
     auto file = MldParser{}.parseBytes(makeGrndMld());
     auto& data = *file.groundResources.at(0x180U).grnd;
@@ -305,6 +382,8 @@ TEST(MldCanonical, GrndGridHelperAssignsEveryTriangleForWriting) {
     ASSERT_EQ(data.cells.size(), 1U);
     ASSERT_EQ(data.cells[0].references.size(), 1U);
     EXPECT_EQ(data.cells[0].references[0].meshTriangleIndex, 0U);
+    EXPECT_FLOAT_EQ(data.gridOriginX, 0.0F);
+    EXPECT_FLOAT_EQ(data.gridOriginZ, 0.0F);
     EXPECT_TRUE(MldFileWriter{}.write(file).ok());
 }
 
@@ -425,4 +504,100 @@ TEST(MldCanonical, CompatibilityParseMatchesExplicitProjection) {
     EXPECT_EQ(
         spice::mld::exporting::BlenderIrJsonExporter{}.toJson(*projected.blenderIrScene),
         spice::mld::exporting::BlenderIrJsonExporter{}.toJson(*compatibility.blenderIrScene));
+}
+
+TEST(GrndTranslationCorpus, A103bCanonicalWorldAndBlenderMeshesUseAuthoredSetTranslations) {
+    const std::filesystem::path path =
+        "D:/SoAGC/2002-12-19-gc-us-final_Skies_of_Arcadia_Legends/field/a103b.mld";
+    if (!std::filesystem::exists(path)) {
+        GTEST_SKIP() << "US GameCube A103B.MLD is not available on this machine";
+    }
+
+    const auto source = readBytes(path);
+    const MldParser parser{};
+    const auto file = parser.parseBytes(source);
+    ASSERT_EQ(file.sourcePlatform, spice::mld::model::TargetPlatform::GameCube);
+    const auto& lower = *file.groundResources.at(0x00009580U).grnd;
+    const auto& ramp = *file.groundResources.at(0x00010560U).grnd;
+    const auto& upper = *file.groundResources.at(0x00016160U).grnd;
+
+    ASSERT_GE(lower.triangleSets.size(), 4U);
+    ASSERT_GE(ramp.triangleSets.size(), 5U);
+    EXPECT_NEAR(lower.triangleSets[2].localToResourceTranslation.y, 83.5783691F, 0.0001F);
+    EXPECT_FLOAT_EQ(ramp.triangleSets[2].localToResourceTranslation.x, -95.0F);
+    EXPECT_FLOAT_EQ(ramp.triangleSets[2].localToResourceTranslation.y, 133.0F);
+    EXPECT_FLOAT_EQ(ramp.triangleSets[2].localToResourceTranslation.z, -231.5F);
+    EXPECT_FLOAT_EQ(upper.triangleSets[2].localToResourceTranslation.y, 0.0F);
+
+    const auto lowerBounds = positionBounds(lower.mesh.vertices);
+    const auto rampBounds = positionBounds(ramp.mesh.vertices);
+    const auto upperBounds = positionBounds(upper.mesh.vertices);
+    EXPECT_NEAR(lowerBounds[2], 80.0F, 0.001F);
+    EXPECT_NEAR(lowerBounds[3], 80.0F, 0.001F);
+    EXPECT_NEAR(rampBounds[0], -154.808319F, 0.001F);
+    EXPECT_NEAR(rampBounds[1], 165.0F, 0.001F);
+    EXPECT_NEAR(rampBounds[2], 80.0F, 0.001F);
+    EXPECT_NEAR(rampBounds[3], 136.0F, 0.001F);
+    EXPECT_NEAR(rampBounds[4], -294.5F, 0.001F);
+    EXPECT_NEAR(rampBounds[5], -124.973503F, 0.001F);
+    EXPECT_NEAR(upperBounds[2], 136.0F, 0.001F);
+    EXPECT_NEAR(upperBounds[3], 136.0F, 0.001F);
+
+    const auto projected = parser.project(file);
+    const auto surface = std::find_if(projected.world.grndSurfaces.begin(), projected.world.grndSurfaces.end(),
+        [](const auto& item) { return item.id == 0x00010560U; });
+    ASSERT_NE(surface, projected.world.grndSurfaces.end());
+    const auto surfaceBounds = positionBounds(surface->mesh.vertices);
+    EXPECT_EQ(surfaceBounds, rampBounds);
+
+    ASSERT_TRUE(projected.blenderIrScene.has_value());
+    const auto& scene = *projected.blenderIrScene;
+    const auto irMesh = std::find_if(scene.meshes.begin(), scene.meshes.end(),
+        [](const auto& item) { return item.sourceObjectAddress == 0x00010560U; });
+    ASSERT_NE(irMesh, scene.meshes.end());
+    const auto irBounds = positionBounds(irMesh->vertices);
+    EXPECT_EQ(irBounds, rampBounds);
+
+    const auto unchanged = MldFileWriter{}.write(file);
+    ASSERT_TRUE(unchanged.ok());
+    EXPECT_EQ(unchanged.bytes, source);
+}
+
+TEST(GrndTranslationCorpus, DreamcastA103bArchivesRetainNonzeroSetTranslationsAndNoEditBytes) {
+    const std::array paths{
+        std::filesystem::path{ R"(D:\SoADC\SoA(Eu)Disc1Assets\FIELD\A103B.MLD)" },
+        std::filesystem::path{ R"(D:\SoADC\SoA(Usa)Disc1Assets\FIELD\A103B.MLD)" },
+    };
+    if (!std::filesystem::exists(paths[0]) || !std::filesystem::exists(paths[1])) {
+        GTEST_SKIP() << "Dreamcast A103B.MLD corpus files are not available on this machine";
+    }
+
+    std::size_t nonzeroTranslations = 0U;
+    std::size_t translatedTriangles = 0U;
+    for (const auto& path : paths) {
+        const auto source = readBytes(path);
+        const auto file = MldParser{}.parseBytes(source);
+        ASSERT_EQ(file.sourcePlatform, spice::mld::model::TargetPlatform::Dreamcast);
+        for (const auto& [address, resource] : file.groundResources) {
+            (void)address;
+            if (!resource.grnd.has_value()) {
+                continue;
+            }
+            for (const auto& set : resource.grnd->triangleSets) {
+                if (set.localToResourceTranslation.x != 0.0F ||
+                    set.localToResourceTranslation.y != 0.0F ||
+                    set.localToResourceTranslation.z != 0.0F) {
+                    ++nonzeroTranslations;
+                    translatedTriangles += set.declaredTriangleCount;
+                }
+            }
+        }
+        const auto unchanged = MldFileWriter{}.write(file);
+        ASSERT_TRUE(unchanged.ok());
+        EXPECT_EQ(unchanged.bytes, source);
+    }
+    EXPECT_GT(nonzeroTranslations, 0U);
+    EXPECT_GT(translatedTriangles, 0U);
+    std::cout << "Dreamcast A103B translated sets=" << nonzeroTranslations
+              << " declared triangles=" << translatedTriangles << '\n';
 }

@@ -1,0 +1,18 @@
+{
+  "validation_date": "2026-08-29",
+  "gamecube_fixture": "US field/a103b.mld",
+  "gamecube_expected_y_layers": {
+    "lower_floor": [80.0, 80.0],
+    "entry_7_ramp": [80.0, 136.0],
+    "upper_floor": [136.0, 136.0]
+  },
+  "dreamcast_fixtures": [
+    "EU Disc 1 FIELD/A103B.MLD",
+    "US Disc 1 FIELD/A103B.MLD"
+  ],
+  "dreamcast_nonzero_translated_sets": 72,
+  "dreamcast_declared_triangles_in_translated_sets": 628,
+  "selector_provenance_hash": "0860fb34e777f083",
+  "selector_patch_hash": "ef890738675cab0b",
+  "raw_assets_tracked": false
+}
