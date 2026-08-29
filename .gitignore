@@ -33,8 +33,11 @@ SpiceGrinder/decompressed_inputs/
 SpiceGrinder/inputs/
 SpiceSCT/full_spice_out/
 SpiceBin/research/
+SpiceEct/research/
 SpiceMll/research/
 SpiceMLD/research/
+SpicePvm/research/
+SpiceSCT/research/
 SpiceSstSml/research/
 SpiceSstSml/requests/
 SpiceMlk/research/
