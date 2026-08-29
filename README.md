@@ -1,80 +1,45 @@
 # SPICE
 
-SPICE is the Skies Package Interchange and Content Encoder. It provides
-file-type libraries, reusable file operations, a command-line frontend, and a
-Qt desktop frontend for Skies of Arcadia content tooling.
+SPICE is the Skies Package Interchange and Content Encoder, a Windows C++20 toolkit for inspecting, converting, and editing assets from *Skies of Arcadia* and *Skies of Arcadia Legends*.
 
-## Frontend architecture
 
-- `SpiceRoot` contains low-level, file-type-neutral primitives used throughout
-  the repository.
-- `SpiceMix` contains reusable, non-Qt operations. It accepts typed requests,
-  reports structured events, and supports cancellation without depending on a
-  particular frontend.
-- `SpiceGrinder` is the command-line frontend. It parses CLI arguments, runs a
-  SpiceMix request, and renders operation events to the console.
-- `SpiceRack` is the Qt desktop frontend. Its first workbenches inspect MLD
-  documents and edit standalone or embedded GVR textures through SpiceMix.
 
-SpiceGrinder and SpiceRack are separate executables. Running SpiceGrinder with
-no arguments prints CLI help and does not launch the GUI.
+## Features
 
-## Scope
+- Dedicated libraries for supported Dreamcast and GameCube file formats.
+- Platform-neutral editable models where safe rewriting is supported.
+- `SpiceGrinder`, a command-line interface for conversion and export workflows.
+- `SpiceRack`, a Qt desktop application for MLD inspection and GVR/PVR texture editing.
+- PNG, JSON, Blender IR, and selected ALX CSV interchange workflows.
 
-Included projects:
 
-- Compression
-- SpiceRoot
-- SpiceMix
-- SpiceGrinder
-- SpiceRack
-- SpiceGvm
-- SpiceSCT
-- SpiceMLD
-- SpiceMll
-- SpiceContentGraph
-- SpiceTests
-- Sa3Dport
-- tools/sa3d_ref_runner
-- third-party/SA3D.Modeling
-- third-party/googletest-1.17.0
 
-## Build
+## Building
 
-The full solution requires the MSVC v145 toolchain and the Qt VS Tools
-registration `6.10.3_msvc2022_64` (Qt Core, Gui, and Widgets). Use the VS 18
-MSBuild toolchain from the repo root:
+### Requirements
+
+- Windows with the Windows SDK and MSVC v145 toolchain.
+- Qt 6.10.3 for MSVC 2022 x64, registered with Qt VS Tools as `6.10.3_msvc2022_64`.
+- .NET 8 SDK for `SA3DRefRunner`.
+- Git submodules initialized for SA3D.Modeling.
+
+From the repository root, initialize dependencies and run the solution build from an elevated Developer PowerShell:
 
 ```powershell
-& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" SPICE.sln /p:Configuration=Debug /p:Platform=x64 /m:1 /nr:false /v:minimal
+git submodule update --init --recursive
+
+& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" SPICE.sln /p:Configuration=Debug /p:Platform=x64
 ```
 
-## Test
+
+
+## Usage
+
+Use the command-line help for the current command list and command-specific options:
 
 ```powershell
-.\x64\Debug\SpiceTests.exe
+.\bin\x64\Debug\SpiceGrinder.exe --help
 ```
-
-## CLI
-
-Running with no arguments or with `--help` prints the command list. Inputs and
-outputs are always explicit; use `<command> --help` for command-specific usage.
-
-```powershell
-.\bin\x64\Debug\SpiceGrinder.exe parse-sct --input <input_dir> --output <output_dir>
-.\bin\x64\Debug\SpiceGrinder.exe export-mld-entry-list --input <input_dir> --output <output_dir>
-.\bin\x64\Debug\SpiceGrinder.exe inventory-mld-gvr-formats --input <mld_input_dir> --output <output_dir>
-.\bin\x64\Debug\SpiceGrinder.exe export-content-graph --input <input_dir> --output <output_dir> --projection sections
-.\bin\x64\Debug\SpiceGrinder.exe export-gvr-image-ir --input <input_dir> --output <output_dir>
-.\bin\x64\Debug\SpiceGrinder.exe import-gvr-image-ir --input <ir_dir> --output <output_dir> --aklz preserve
-.\bin\x64\Debug\SpiceGrinder.exe create-gvr --input texture.png --output texture.gvr --format cmpr --mipmaps on
-.\bin\x64\Debug\SpiceGrinder.exe replace-gvr --source original.gvr --input replacement.png --output texture.gvr
-.\bin\x64\Debug\SpiceGrinder.exe replace-mld-texture --source source.mld --replacement replacement.png --output output.mld --texture-name tk000000 --format rgba8 --allow-dimension-change
-.\bin\x64\Debug\SpiceGrinder.exe create-gvr-batch --input <png_dir> --output <gvr_out_dir> --format ci8 --palette-format rgb5a3
-.\bin\x64\Debug\SpiceGrinder.exe replace-gvr-batch --input <png_dir> --source-gvr-dir <source_gvr_dir> --output <gvr_out_dir>
-```
-
-## GUI
 
 Launch the desktop application with:
 
@@ -82,70 +47,68 @@ Launch the desktop application with:
 .\bin\x64\Debug\SpiceRack.exe
 ```
 
-SpiceRack uses closable document tabs. The MLD workbench exposes overview,
-entry, texture, export, and diagnostic pages; GVR and PVR textures can be
-replaced from PNG and staged across multiple entries before saving to a new MLD. The Exports
-page writes Blender IR JSON, detailed entry-list JSON, or both from the current
-document state, including staged changes. Standalone GVR and PVR workbenches can
-open native textures or create new textures from PNG. Advanced GVR controls
-expose format, palette, mipmap, global-index, and AKLZ wrapper choices; PVR
-controls expose pixel format, data layout, and global index.
-All texture workbenches use a shared viewport with crisp nearest-neighbor,
-whole-number fit as the default. Linear sampling is available as an approximate
-filtered preview, alongside explicit zoom and transparency-background controls.
-Editing controls live in a resizable right sidebar. Job history stays collapsed
-above the status bar until its arrow button is selected; warnings and errors
-highlight that button without opening the history automatically.
+SpiceRack currently opens MLD, GVR, and PVR documents and can create GVR or PVR textures from PNG images.
 
-Local MLD, GVR, and PVR files can also be dragged from Explorer onto SpiceRack.
-Multiple documents open sequentially, existing tabs are reused, and unsupported
-or invalid files are summarized after the batch. In the MLD Textures page, drop
-one PNG directly onto the texture viewport to replace the selected editable GVR
-or PVR entry. Rack confirms the target, dimensions, and active encoding settings
-before staging the replacement; PNG drops elsewhere are intentionally ignored.
 
-For automated launch validation, `SpiceRack.exe --smoke-test` initializes the
-main window and verifies the status/event toggle plus deterministic viewport
-rendering and drop routing. Supplying one or more MLD, GVR, or PVR paths opens
-them sequentially, waits for the background loads, and checks the final loaded
-workbench; failures return a nonzero code:
 
-```powershell
-.\bin\x64\Debug\SpiceRack.exe --smoke-test <document.mld-gvr-or-pvr> [more-documents...]
-```
+## Supported formats
 
-## Breaking project-name migration
+Support varies by format. Some formats have semantic editors and writers, while others currently provide conservative parsing or research exports only.
 
-This architecture is a clean break. Update project references, includes,
-namespaces, and executable invocations using this mapping:
+| Format           | Project       | Current support                                                                                                                    |
+| ---------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| AKLZ             | `Compression` | Compresses and decompresses the wrapper used by many GameCube assets.                                                              |
+| `.bin`           | `SpiceBin`    | Provides read-only probing for known indexed UI/layout families; `.bin` is not treated as one universal format.                    |
+| `.ect`           | `SpiceEct`    | Parses, edits, and writes Dreamcast and GameCube encounter tables through a platform-neutral model.                                |
+| `.gvm` / `.gvr`  | `SpiceGvm`    | Parses GVM archives and decodes, creates, or edits GVR textures with PNG interchange.                                              |
+| `.mld`           | `SpiceMLD`    | Parses GameCube and Dreamcast scene/model containers, exports inspection data, and writes supported geometry and texture surfaces. |
+| `.mlk`           | `SpiceMlk`    | Provides read-only battle-resource inspection, corpus reports, and embedded-MLD Blender IR exports; repacking is not supported.    |
+| `.mll`           | `SpiceMll`    | Parses member archives and supports conservative rebuilding and member replacement.                                                |
+| `.pvm` / `.pvr`  | `SpicePvm`    | Parses, decodes, and encodes Dreamcast texture archives and textures.                                                              |
+| `.sct`           | `SpiceSCT`    | Parses scripts and canonically rebuilds known structures; opcode semantics remain incomplete.                                      |
+| `.sml` / `.sst`  | `SpiceSstSml` | Provides read-only parsing and research exports for paired battle-stage files.                                                     |
+| `.std`           | `SpiceStd`    | Parses battle action and entry tables, exports JSON, and rewrites promoted semantic fields.                                        |
+| ALX 5.0.0 `.csv` | `SpiceTrade`  | Provides typed interchange for `enemy.csv`, `enemyencounter.csv`, and `enemyevent.csv` only.                                       |
 
-| Retired name | Replacement |
-| --- | --- |
-| `SpiceCore` | `SpiceRoot` |
-| `SpiceFileParsing` executable/CLI | `SpiceGrinder` |
-| reusable operation sources formerly inside `SpiceFileParsing` | `SpiceMix` |
 
-Standalone `.gvr` image IR export writes lossless RGBA PNG files plus
-`.gvr.json` sidecars. Import supports I4, I8, IA4, IA8, RGB565, RGB5A3, RGBA8,
-CI4, CI8, CI14X2, and CMPR GVR output through the sidecar `importTextureFormat`
-field. Indexed output supports IA8, RGB565, and RGB5A3 internal palettes through
-`importPaletteFormat`. `--aklz preserve|compressed|raw` controls wrapping;
-`preserve` keeps AKLZ wrapping when the sidecar says the source file was
-AKLZ-compressed.
 
-Sidecar-free GVR creation and replacement accept PNG input directly. New GVRs default
-to RGBA8, no mipmaps, raw output, and no global index. Replacement preserves the
-source GVR format, palette format, mipmap flag, AKLZ wrapping, and GCIX/global-index
-value unless explicit `--format`, `--palette-format`, `--mipmaps`, `--aklz`, or
-`--global-index` overrides are supplied.
+## Applications and supporting projects
 
-MLD GVR format sampling writes `mld_gvr_format_inventory.json` and
-`mld_gvr_format_priority_report.md` without raw texture payloads.
+| Project         | Purpose                                                                                                |
+| --------------- | ------------------------------------------------------------------------------------------------------ |
+| `SpiceGrinder`  | Command-line interface for conversions, exports, and research operations.                              |
+| `SpiceRack`     | Qt desktop interface for inspecting MLD documents and editing standalone or embedded GVR/PVR textures. |
+| `SpiceMix`      | Frontend-neutral operation and editable-document layer shared by SpiceGrinder and SpiceRack.           |
+| `SpiceRoot`     | Common endian, alignment, FourCC, and binary I/O primitives.                                           |
+| `Sa3Dport`      | C++ port of the SA3D model and animation functionality used by SPICE.                                  |
+| `SpiceTests`    | Central GoogleTest-based automated test suite.                                                         |
+| `SA3DRefRunner` | .NET reference bridge used to compare SPICE behavior with SA3D.Modeling.                               |
 
-Embedded MLD texture replacement rebuilds the texture archive, so replacement
-GVR payloads may grow or shrink. Select the target with `--texture-index` or
-`--texture-name`; output preserves MLD AKLZ wrapping by default through
-`--aklz preserve`. If an archive is not terminal, size-changing replacements
-fail unless `--allow-post-archive-shift` is supplied.
 
-Reference materials and sample parser fixtures are under `soa_parser_reference_bundle/`.
+
+## Documentation
+
+- [`Docs/`](Docs/) contains format layouts, implementation status, and known gaps.
+- [`SpiceMLD/blender/`](SpiceMLD/blender/) contains the Blender IR importer and its usage notes.
+- [`SpiceTrade/README.md`](SpiceTrade/README.md) documents the intentionally narrow ALX CSV compatibility surface.
+
+
+
+## Acknowledgements
+
+SPICE incorporates or builds on work from:
+
+- [SA3D.Modeling](https://github.com/X-Hax/SA3D.Modeling) and the X-Hax contributors, which provide the upstream model and animation reference for `Sa3Dport`.
+- SALSA, which provides reference metadata and terminology for SCT instructions.
+- ALX 5.0.0, which provides the compatibility target for selected CSV tables.
+- LodePNG, used for PNG encoding and decoding.
+
+Third-party components remain subject to their respective licenses and notices.
+
+
+
+## License and game data
+
+SPICE does not currently declare a top-level project license. The repository contains tooling only and does not include game data, extracted assets, or reference corpora.
+
+SPICE is an independent fan and research project and is not affiliated with or endorsed by the rights holders of *Skies of Arcadia*.
