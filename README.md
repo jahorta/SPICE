@@ -83,16 +83,24 @@ Launch the desktop application with:
 ```
 
 SpiceRack uses closable document tabs. The MLD workbench exposes overview,
-entry, texture, and diagnostic pages; GVR textures can be replaced from PNG and
-staged across multiple entries before saving to a new MLD. PVR textures are
-read-only but support preview, native extraction, and PNG export. The standalone
+entry, texture, export, and diagnostic pages; GVR textures can be replaced from
+PNG and staged across multiple entries before saving to a new MLD. The Exports
+page writes Blender IR JSON, detailed entry-list JSON, or both from the current
+document state, including staged changes. PVR textures are read-only but support
+preview, native extraction, and PNG export. The standalone
 GVR workbench can open GVR files or create a new RGBA8 GVR from PNG. Advanced
 controls expose format, palette, mipmap, global-index, and AKLZ wrapper choices.
+Both texture workbenches use a shared viewport with crisp nearest-neighbor,
+whole-number fit as the default. Linear sampling is available as an approximate
+filtered preview, alongside explicit zoom and transparency-background controls.
+Editing controls live in a resizable right sidebar. Job history stays collapsed
+above the status bar until its arrow button is selected; warnings and errors
+highlight that button without opening the history automatically.
 
-For automated launch validation, `SpiceRack.exe --smoke-test` initializes and
-shows the main window, then exits. Supplying an MLD or GVR path waits for the
-background document load and returns a failure code if the workbench cannot be
-created:
+For automated launch validation, `SpiceRack.exe --smoke-test` initializes the
+main window and verifies the status/event toggle plus deterministic viewport
+rendering. Supplying an MLD or GVR path also waits for the background document
+load and checks the loaded workbench; failures return a nonzero code:
 
 ```powershell
 .\bin\x64\Debug\SpiceRack.exe --smoke-test <document.mld-or-gvr>
