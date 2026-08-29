@@ -111,7 +111,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <None Include="fixtures\mld\s044_sml_entry_0.mld" />
     <None Include="fixtures\spice_trade\enemyevent_quoted.csv" />
     <ClCompile Include="..\third-party\googletest-1.17.0\googletest\src\gtest-all.cc" />
     <ClCompile Include="run_tests.cpp" />

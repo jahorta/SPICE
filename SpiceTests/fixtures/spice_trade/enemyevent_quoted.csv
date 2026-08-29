@@ -1,3 +1,3 @@
 Entry ID,Magic EXP,Initiative,Defeat Cond ID,Escape Cond ID,BGM ID,PC1 ID,[PC1 Name],PC1 X,PC1 Z,PC2 ID,[PC2 Name],PC2 X,PC2 Z,PC3 ID,[PC3 Name],PC3 X,PC3 Z,PC4 ID,[PC4 Name],PC4 X,PC4 Z,EC1 ID,[EC1 US Name],EC1 X,EC1 Z,EC2 ID,[EC2 US Name],EC2 X,EC2 Z,EC3 ID,[EC3 US Name],EC3 X,EC3 Z,EC4 ID,[EC4 US Name],EC4 X,EC4 Z,EC5 ID,[EC5 US Name],EC5 X,EC5 Z,EC6 ID,[EC6 US Name],EC6 X,EC6 Z,EC7 ID,[EC7 US Name],EC7 X,EC7 Z
-7,3,14,0,1,58,0,"Vyse, Hero",4,6,-1,None,-1,-1,-1,None,-1,-1,-1,None,-1,-1,0,"Test,
+7,3,14,0,1,58,0,"Player, One",4,6,-1,None,-1,-1,-1,None,-1,-1,-1,None,-1,-1,0,"Test,
 Enemy",4,2,255,None,-1,-1,255,None,-1,-1,255,None,-1,-1,255,None,-1,-1,255,None,-1,-1,255,None,-1,-1

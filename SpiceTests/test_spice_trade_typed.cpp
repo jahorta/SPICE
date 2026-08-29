@@ -101,7 +101,9 @@ TEST(SpiceTradeTypedSchemas, WhitelistAndCanonicalHeadersMatchAlx500)
 TEST(SpiceTradeTypedCorpus, AllFinalReleaseTablesSemanticallyRoundTrip)
 {
     const auto corpus = referenceCorpusRoot();
-    ASSERT_FALSE(corpus.empty()) << "Repo-local ALX 5.0.0 reference corpus is unavailable";
+    if (corpus.empty()) {
+        GTEST_SKIP() << "Private ALX 5.0.0 reference corpus is unavailable";
+    }
 
     bool sawAbsentBgm = false;
     for (const auto& dataset : kReferenceDatasets) {
@@ -150,7 +152,11 @@ TEST(SpiceTradeTypedCorpus, AllFinalReleaseTablesSemanticallyRoundTrip)
 
 TEST(SpiceTradeTypedCodecs, EditsAndFullVectorOperationsRoundTrip)
 {
-    const auto root = referenceCorpusRoot() / "2002-12-19-gc-us-final";
+    const auto corpus = referenceCorpusRoot();
+    if (corpus.empty()) {
+        GTEST_SKIP() << "Private ALX 5.0.0 reference corpus is unavailable";
+    }
+    const auto root = corpus / "2002-12-19-gc-us-final";
 
     auto enemies = EnemyCsvCodec{}.readFile(root / "enemy.csv");
     ASSERT_TRUE(enemies.ok());
@@ -207,7 +213,11 @@ TEST(SpiceTradeTypedCodecs, EditsAndFullVectorOperationsRoundTrip)
 
 TEST(SpiceTradeTypedCodecs, RejectsNoncanonicalHeadersAndUnrepresentableModels)
 {
-    const auto root = referenceCorpusRoot() / "2002-12-19-gc-us-final";
+    const auto corpus = referenceCorpusRoot();
+    if (corpus.empty()) {
+        GTEST_SKIP() << "Private ALX 5.0.0 reference corpus is unavailable";
+    }
+    const auto root = corpus / "2002-12-19-gc-us-final";
     const auto parsed = CsvReader{}.readFile(root / "enemy.csv");
     ASSERT_TRUE(parsed.ok());
 
@@ -240,7 +250,11 @@ TEST(SpiceTradeTypedCodecs, RejectsNoncanonicalHeadersAndUnrepresentableModels)
 
 TEST(SpiceTradeTypedWorkspace, LoadsIndependentSubsetsAndWritesOnlyChangedTables)
 {
-    const auto source = referenceCorpusRoot() / "2002-12-19-gc-us-final";
+    const auto corpus = referenceCorpusRoot();
+    if (corpus.empty()) {
+        GTEST_SKIP() << "Private ALX 5.0.0 reference corpus is unavailable";
+    }
+    const auto source = corpus / "2002-12-19-gc-us-final";
     const std::array requested{ AlxTableKind::EnemyEncounter };
     auto read = AlxWorkspaceReader{}.read(source, requested);
     ASSERT_TRUE(read.ok());
@@ -272,8 +286,12 @@ TEST(SpiceTradeTypedWorkspace, LoadsIndependentSubsetsAndWritesOnlyChangedTables
 
 TEST(SpiceTradeTypedWorkspace, RequestedImportIsAllOrNothing)
 {
+    const auto corpus = referenceCorpusRoot();
+    if (corpus.empty()) {
+        GTEST_SKIP() << "Private ALX 5.0.0 reference corpus is unavailable";
+    }
     TemporaryDirectory temp{};
-    const auto corpusFile = referenceCorpusRoot()
+    const auto corpusFile = corpus
         / "2002-12-19-gc-us-final" / "enemy.csv";
     std::filesystem::copy_file(corpusFile, temp.path / "enemy.csv");
 

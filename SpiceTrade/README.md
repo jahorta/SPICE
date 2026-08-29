@@ -38,6 +38,8 @@ out of scope because SALSA owns that editing workflow.
 
 ALX's GPLv3 Ruby source may be used as a behavioral reference and external
 compatibility oracle, but its implementation is not copied or line-translated.
-The user-provided `Alx v5.0.0 corpuses` directory contains reference exports
-for all final Dreamcast and GameCube profiles. Tests require those files and
-verify semantic typed round trips across all three whitelisted tables.
+An optional, user-provided `Alx v5.0.0 corpuses` directory may contain private
+reference exports for local compatibility testing. The directory is ignored by
+Git and must not be committed. Corpus tests verify semantic typed round trips
+across all three whitelisted tables when those private inputs are available and
+skip cleanly when they are absent.

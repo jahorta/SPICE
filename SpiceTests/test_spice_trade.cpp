@@ -267,7 +267,9 @@ TEST(SpiceTradeWorkspace, LeavesDocumentDirtyWhenOutputFails)
 TEST(SpiceTradeAlx500CodecCorpus, RepoReferenceCsvFilesParseAndSemanticallyRoundTrip)
 {
     const auto dataRoot = referenceCorpusRoot();
-    ASSERT_FALSE(dataRoot.empty()) << "Repo-local ALX 5.0.0 reference corpus is unavailable";
+    if (dataRoot.empty()) {
+        GTEST_SKIP() << "Private ALX 5.0.0 reference corpus is unavailable";
+    }
 
     std::vector<std::filesystem::path> csvFiles{};
     for (const auto& entry : std::filesystem::recursive_directory_iterator(dataRoot)) {

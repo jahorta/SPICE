@@ -73,9 +73,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Alx v5.0.0 corpuses\**\*.csv">
-      <Filter>Reference Corpus</Filter>
-    </None>
     <None Include="README.md" />
   </ItemGroup>
 </Project>

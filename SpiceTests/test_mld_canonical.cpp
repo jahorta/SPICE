@@ -405,7 +405,9 @@ TEST(MldCanonical, WriterRebuildsEditedGobjTopologyAndUpdatesObjectPointer) {
 
 TEST(MldCanonical, WrappedRealFixtureRetainsPartialDiagnosticsAndProjectsVisibleGeometry) {
     const auto fixture = findMldFixture("s044_sml_entry_0.mld");
-    ASSERT_FALSE(fixture.empty());
+    if (fixture.empty()) {
+        GTEST_SKIP() << "Private S044 MLD fixture is unavailable";
+    }
     const auto file = MldParser{}.parseBytes(readBytes(fixture));
     ASSERT_EQ(file.parseStatus, spice::mld::model::MldParseStatus::Partial)
         << describeDiagnostics(file);
@@ -462,7 +464,9 @@ TEST(MldCanonical, WriterRejectsRelocationReferencedByUnknownRange) {
 
 TEST(MldCanonical, WriterRejectsReplacedReadOnlySa3dModel) {
     const auto fixture = findMldFixture("s044_sml_entry_0.mld");
-    ASSERT_FALSE(fixture.empty());
+    if (fixture.empty()) {
+        GTEST_SKIP() << "Private S044 MLD fixture is unavailable";
+    }
     auto file = MldParser{}.parseBytes(readBytes(fixture));
     ASSERT_TRUE(file.objectResources.at(0xC0U).model);
     file.objectResources.at(0xC0U).model.reset();
