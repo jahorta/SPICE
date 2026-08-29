@@ -164,7 +164,7 @@ std::vector<std::uint8_t> makeGrndMld(
     return bytes;
 }
 
-std::vector<std::uint8_t> makeGobjMld() {
+std::vector<std::uint8_t> makeGobjMld(const bool normalDiffuse = false) {
     constexpr std::uint32_t address = 0x180U;
     auto bytes = makeBaseMld(address, true);
     constexpr std::size_t node = 0x10U;
@@ -172,7 +172,8 @@ std::vector<std::uint8_t> makeGobjMld() {
     constexpr std::size_t payload = attach + 0x10U;
     constexpr std::size_t stream = payload + 76U;
     constexpr std::size_t vertices = 0xBCU;
-    constexpr std::size_t size = vertices + 8U + 3U * 24U;
+    const std::size_t recordWords = normalDiffuse ? 7U : 6U;
+    const std::size_t size = vertices + 8U + 3U * recordWords * 4U;
     writeTag(bytes, address, "GOBJ");
     writeU32(bytes, address + 4U, static_cast<std::uint32_t>(size));
     writeU32(bytes, address + node, static_cast<std::uint32_t>(attach - node));
@@ -181,21 +182,25 @@ std::vector<std::uint8_t> makeGobjMld() {
     writeF32(bytes, address + node + 0x28U, 1.0F);
     writeU32(bytes, address + payload, static_cast<std::uint32_t>(vertices - payload));
     for (std::size_t i = 0; i < 3U; ++i) {
-        writeU16(bytes, address + stream + i * 4U, static_cast<std::uint16_t>(2U + i * 6U));
+        writeU16(bytes, address + stream + i * 4U, static_cast<std::uint16_t>(2U + i * recordWords));
         writeU16(bytes, address + stream + i * 4U + 2U, static_cast<std::uint16_t>(i + 1U));
     }
     writeU16(bytes, address + stream + 12U, 0xFFFFU);
     writeU16(bytes, address + stream + 14U, 0xFFFFU);
-    writeU32(bytes, address + vertices, 0x29U);
+    writeU32(bytes, address + vertices, normalDiffuse ? 0x2AU : 0x29U);
     writeU32(bytes, address + vertices + 4U, 3U << 16U);
     for (std::size_t i = 0; i < 3U; ++i) {
-        const auto vertex = address + vertices + 8U + i * 24U;
+        const auto vertex = address + vertices + 8U + i * recordWords * 4U;
         writeF32(bytes, vertex, static_cast<float>(i == 1U));
         writeF32(bytes, vertex + 4U, 0.0F);
         writeF32(bytes, vertex + 8U, static_cast<float>(i == 2U));
         writeF32(bytes, vertex + 12U, 0.0F);
         writeF32(bytes, vertex + 16U, 1.0F);
         writeF32(bytes, vertex + 20U, 0.0F);
+        if (normalDiffuse) {
+            constexpr std::array<std::uint32_t, 3> colors{ 0x11223344U, 0x80ABCDEFU, 0xFFFFFFFFU };
+            writeU32(bytes, vertex + 24U, colors[i]);
+        }
     }
     return bytes;
 }
@@ -401,6 +406,67 @@ TEST(MldCanonical, WriterRebuildsEditedGobjTopologyAndUpdatesObjectPointer) {
     const auto newAddress = reparsed.entries[0].entry.objectAddresses->values[0];
     ASSERT_TRUE(reparsed.groundResources.at(newAddress).gobj.has_value());
     EXPECT_EQ(reparsed.groundResources.at(newAddress).gobj->nodes[0].streamMesh.indices.size(), 6U);
+}
+
+TEST(MldCanonical, WriterPreservesAndRebuildsNormalDiffuseGobj) {
+    const auto source = makeGobjMld(true);
+    auto file = MldParser{}.parseBytes(source);
+    auto& resource = file.groundResources.at(0x180U);
+    ASSERT_TRUE(resource.gobj.has_value());
+    auto& node = resource.gobj->nodes[0];
+    ASSERT_TRUE(node.attach.has_value());
+    EXPECT_EQ(node.attach->vertexChunk.chunkType, 0x2AU);
+    ASSERT_EQ(node.streamMesh.vertices.size(), 3U);
+    ASSERT_TRUE(node.streamMesh.vertices[0].diffuseColor.has_value());
+
+    const auto unchanged = MldFileWriter{}.write(file);
+    ASSERT_TRUE(unchanged.ok());
+    EXPECT_EQ(unchanged.bytes, source);
+
+    node.streamMesh.vertices[0].diffuseColor = spice::mld::model::ColorRgba8{
+        .r = 1U, .g = 2U, .b = 3U, .a = 4U,
+    };
+    const auto written = MldFileWriter{}.write(file);
+    ASSERT_TRUE(written.ok());
+    const auto reparsed = MldParser{}.parseBytes(written.bytes);
+    const auto address = reparsed.entries[0].entry.objectAddresses->values[0];
+    const auto& rebuiltNode = reparsed.groundResources.at(address).gobj->nodes[0];
+    ASSERT_TRUE(rebuiltNode.attach.has_value());
+    EXPECT_EQ(rebuiltNode.attach->vertexChunk.chunkType, 0x2AU);
+    ASSERT_TRUE(rebuiltNode.streamMesh.vertices[0].diffuseColor.has_value());
+    EXPECT_EQ(rebuiltNode.streamMesh.vertices[0].diffuseColor->r, 1U);
+    EXPECT_EQ(rebuiltNode.streamMesh.vertices[0].diffuseColor->g, 2U);
+    EXPECT_EQ(rebuiltNode.streamMesh.vertices[0].diffuseColor->b, 3U);
+    EXPECT_EQ(rebuiltNode.streamMesh.vertices[0].diffuseColor->a, 4U);
+
+    const auto gameCubeWritten = MldFileWriter{}.write(file, spice::mld::exporting::MldWriteOptions{
+        .platform = spice::mld::model::TargetPlatform::GameCube,
+        .compressAklz = false,
+    });
+    ASSERT_TRUE(gameCubeWritten.ok());
+    const auto gameCubeFile = MldParser{}.parseBytes(gameCubeWritten.bytes);
+    EXPECT_EQ(gameCubeFile.endian, Endian::Big);
+    const auto gameCubeAddress = gameCubeFile.entries[0].entry.objectAddresses->values[0];
+    const auto& gameCubeNode = gameCubeFile.groundResources.at(gameCubeAddress).gobj->nodes[0];
+    ASSERT_TRUE(gameCubeNode.streamMesh.vertices[0].diffuseColor.has_value());
+    EXPECT_EQ(gameCubeNode.streamMesh.vertices[0].diffuseColor->r, 1U);
+    EXPECT_EQ(gameCubeNode.streamMesh.vertices[0].diffuseColor->g, 2U);
+    EXPECT_EQ(gameCubeNode.streamMesh.vertices[0].diffuseColor->b, 3U);
+    EXPECT_EQ(gameCubeNode.streamMesh.vertices[0].diffuseColor->a, 4U);
+
+    const auto scene = spice::mld::parsing::Sa3dBlenderIrBuilder{}.build(reparsed);
+    const auto mesh = std::find_if(scene.meshes.begin(), scene.meshes.end(), [](const auto& candidate) {
+        return candidate.label.starts_with("GOBJ_");
+    });
+    ASSERT_NE(mesh, scene.meshes.end());
+    ASSERT_FALSE(mesh->triangleSets.empty());
+    ASSERT_FALSE(mesh->triangleSets[0].corners.empty());
+    EXPECT_TRUE(mesh->triangleSets[0].corners[0].hasColor);
+
+    auto invalid = reparsed;
+    auto& invalidVertices = invalid.groundResources.at(address).gobj->nodes[0].streamMesh.vertices;
+    invalidVertices[0].diffuseColor.reset();
+    EXPECT_FALSE(MldFileWriter{}.write(invalid).ok());
 }
 
 TEST(MldCanonical, WrappedRealFixtureRetainsPartialDiagnosticsAndProjectsVisibleGeometry) {

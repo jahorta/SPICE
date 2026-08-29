@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <span>
 #include <string>
 #include <utility>
@@ -78,7 +79,9 @@ std::vector<std::uint8_t> makeSyntheticGobj(
     const std::uint8_t chunkType,
     const std::uint8_t recordWords,
     const bool hasNormal,
-    const bool hasUserAttributes) {
+    const bool hasUserAttributes,
+    const Endian endian = Endian::Big,
+    const bool hasDiffuseColor = false) {
     constexpr std::size_t nodeOffset = 0x10U;
     constexpr std::size_t attachOffset = 0x50U;
     constexpr std::size_t payloadOffset = attachOffset + 0x10U;
@@ -89,36 +92,36 @@ std::vector<std::uint8_t> makeSyntheticGobj(
 
     std::vector<std::uint8_t> bytes(declaredSize, 0U);
     writeTag(bytes, 0U, "GOBJ");
-    writeU32(bytes, 4U, static_cast<std::uint32_t>(declaredSize), Endian::Big);
-    writeU32(bytes, nodeOffset, static_cast<std::uint32_t>(attachOffset - nodeOffset), Endian::Big);
-    writeF32(bytes, nodeOffset + 0x20U, 1.0F, Endian::Big);
-    writeF32(bytes, nodeOffset + 0x24U, 1.0F, Endian::Big);
-    writeF32(bytes, nodeOffset + 0x28U, 1.0F, Endian::Big);
+    writeU32(bytes, 4U, static_cast<std::uint32_t>(declaredSize), endian);
+    writeU32(bytes, nodeOffset, static_cast<std::uint32_t>(attachOffset - nodeOffset), endian);
+    writeF32(bytes, nodeOffset + 0x20U, 1.0F, endian);
+    writeF32(bytes, nodeOffset + 0x24U, 1.0F, endian);
+    writeF32(bytes, nodeOffset + 0x28U, 1.0F, endian);
 
-    writeU32(bytes, payloadOffset, static_cast<std::uint32_t>(vertexOffset - payloadOffset), Endian::Big);
+    writeU32(bytes, payloadOffset, static_cast<std::uint32_t>(vertexOffset - payloadOffset), endian);
     constexpr std::array<std::uint16_t, 3> flags{ 0x0001U, 0x0002U, 0x8003U };
     for (std::size_t i = 0; i < vertexCount; ++i) {
-        writeU16(bytes, polyOffset + (i * 4U), static_cast<std::uint16_t>(2U + (i * recordWords)), Endian::Big);
-        writeU16(bytes, polyOffset + (i * 4U) + 2U, flags[i], Endian::Big);
+        writeU16(bytes, polyOffset + (i * 4U), static_cast<std::uint16_t>(2U + (i * recordWords)), endian);
+        writeU16(bytes, polyOffset + (i * 4U) + 2U, flags[i], endian);
     }
-    writeU16(bytes, polyOffset + 12U, 0xFFFFU, Endian::Big);
-    writeU16(bytes, polyOffset + 14U, 0xFFFFU, Endian::Big);
+    writeU16(bytes, polyOffset + 12U, 0xFFFFU, endian);
+    writeU16(bytes, polyOffset + 14U, 0xFFFFU, endian);
 
-    writeU32(bytes, vertexOffset, chunkType, Endian::Big);
-    writeU32(bytes, vertexOffset + 4U, static_cast<std::uint32_t>(vertexCount << 16U), Endian::Big);
+    writeU32(bytes, vertexOffset, chunkType, endian);
+    writeU32(bytes, vertexOffset + 4U, static_cast<std::uint32_t>(vertexCount << 16U), endian);
     constexpr std::array<std::uint32_t, 3> userAttributes{ 0xFFFFFFFFU, 0x12345678U, 0x00000000U };
     for (std::size_t i = 0; i < vertexCount; ++i) {
         const std::size_t recordOffset = vertexOffset + 8U + (i * recordWords * 4U);
-        writeF32(bytes, recordOffset + 0U, static_cast<float>(i), Endian::Big);
-        writeF32(bytes, recordOffset + 4U, static_cast<float>(i + 1U), Endian::Big);
-        writeF32(bytes, recordOffset + 8U, static_cast<float>(i + 2U), Endian::Big);
+        writeF32(bytes, recordOffset + 0U, static_cast<float>(i), endian);
+        writeF32(bytes, recordOffset + 4U, static_cast<float>(i + 1U), endian);
+        writeF32(bytes, recordOffset + 8U, static_cast<float>(i + 2U), endian);
         if (hasNormal) {
-            writeF32(bytes, recordOffset + 12U, 0.0F, Endian::Big);
-            writeF32(bytes, recordOffset + 16U, 1.0F, Endian::Big);
-            writeF32(bytes, recordOffset + 20U, 0.0F, Endian::Big);
+            writeF32(bytes, recordOffset + 12U, 0.0F, endian);
+            writeF32(bytes, recordOffset + 16U, 1.0F, endian);
+            writeF32(bytes, recordOffset + 20U, 0.0F, endian);
         }
-        if (hasUserAttributes) {
-            writeU32(bytes, recordOffset + 24U, userAttributes[i], Endian::Big);
+        if (hasUserAttributes || hasDiffuseColor) {
+            writeU32(bytes, recordOffset + 24U, userAttributes[i], endian);
         }
     }
     return bytes;
@@ -1151,6 +1154,90 @@ TEST(GobjParser, DecodesChunk2bAndPreservesRawUserAttributes) {
     EXPECT_EQ(*mesh.vertices[2].rawUserAttributesU32, 0xFFFFFFFFU);
 }
 
+TEST(GobjParser, DecodesNormalDiffuseChunk2aForBothEndians) {
+    for (const auto endian : { Endian::Big, Endian::Little }) {
+        const auto bytes = makeSyntheticGobj(0x2AU, 7U, true, false, endian, true);
+        const auto decoded = spice::mld::parsing::GobjParser{}.decode(bytes, 0x3400U, endian);
+
+        ASSERT_TRUE(decoded.decoded);
+        ASSERT_EQ(decoded.nodes.size(), 1U);
+        const auto& mesh = decoded.nodes[0].streamMesh;
+        ASSERT_EQ(mesh.vertices.size(), 3U);
+        ASSERT_TRUE(mesh.vertices[0].diffuseColor.has_value());
+        ASSERT_TRUE(mesh.vertices[1].diffuseColor.has_value());
+        ASSERT_TRUE(mesh.vertices[2].diffuseColor.has_value());
+        EXPECT_EQ(mesh.vertices[0].diffuseColor->r, 0U);
+        EXPECT_EQ(mesh.vertices[0].diffuseColor->g, 0U);
+        EXPECT_EQ(mesh.vertices[0].diffuseColor->b, 0U);
+        EXPECT_EQ(mesh.vertices[0].diffuseColor->a, 0U);
+        EXPECT_EQ(mesh.vertices[1].diffuseColor->r, 0x34U);
+        EXPECT_EQ(mesh.vertices[1].diffuseColor->g, 0x56U);
+        EXPECT_EQ(mesh.vertices[1].diffuseColor->b, 0x78U);
+        EXPECT_EQ(mesh.vertices[1].diffuseColor->a, 0x12U);
+        EXPECT_EQ(mesh.vertices[2].diffuseColor->r, 0xFFU);
+        EXPECT_EQ(mesh.vertices[2].diffuseColor->g, 0xFFU);
+        EXPECT_EQ(mesh.vertices[2].diffuseColor->b, 0xFFU);
+        EXPECT_EQ(mesh.vertices[2].diffuseColor->a, 0xFFU);
+        EXPECT_FALSE(mesh.vertices[0].rawUserAttributesU32.has_value());
+        ASSERT_TRUE(decoded.nodes[0].attach.has_value());
+        EXPECT_EQ(decoded.nodes[0].attach->vertexChunk.chunkType, 0x2AU);
+        EXPECT_EQ(decoded.nodes[0].attach->vertexChunk.recordWords, 7U);
+
+        auto changed = decoded.data;
+        const auto originalHash = spice::mld::model::semanticHash(decoded.data);
+        changed.nodes[0].streamMesh.vertices[0].diffuseColor->r = 1U;
+        EXPECT_NE(spice::mld::model::semanticHash(changed), originalHash);
+    }
+}
+
+TEST(TriangleMetadataDecoder, ExhaustivelyMatchesRuntimeDecimalArithmetic) {
+    constexpr std::array<std::uint16_t, 10> ones{
+        0x0000U, 0x6800U, 0x7800U, 0x1800U, 0x1400U,
+        0x0100U, 0x1200U, 0x1300U, 0x0000U, 0x0000U,
+    };
+    constexpr std::array<std::uint16_t, 10> tens{
+        0x0000U, 0x0001U, 0x0002U, 0x0003U, 0x0004U,
+        0x0005U, 0x0006U, 0x0007U, 0x0008U, 0x0009U,
+    };
+    constexpr std::array<std::uint16_t, 10> hundreds{
+        0x0000U, 0x0010U, 0x0020U, 0x0030U, 0x0040U,
+        0x0050U, 0x0060U, 0x0000U, 0x0000U, 0x8000U,
+    };
+    constexpr std::array<std::uint16_t, 10> thousands{
+        0x0000U, 0x8000U, 0x8200U, 0x8400U, 0x8600U,
+        0x8800U, 0x8A00U, 0x8C00U, 0x8E00U, 0x9000U,
+    };
+
+    for (std::uint32_t selector = 0U; selector <= 0x7FFFU; ++selector) {
+        const auto d0 = static_cast<std::uint8_t>(selector % 10U);
+        const auto d1 = static_cast<std::uint8_t>((selector / 10U) % 10U);
+        const auto d2 = static_cast<std::uint8_t>((selector / 100U) % 10U);
+        const auto d3 = static_cast<std::uint8_t>((selector / 1000U) % 10U);
+        auto expected = ones[d0];
+        if (selector / 10U != 0U) expected = static_cast<std::uint16_t>(expected | tens[d1]);
+        if (selector / 100U != 0U) expected = static_cast<std::uint16_t>(expected | hundreds[d2]);
+        if (selector / 1000U != 0U) expected = static_cast<std::uint16_t>(expected + thousands[d3]);
+
+        for (const auto winding : { false, true }) {
+            const auto raw = static_cast<std::uint16_t>(selector | (winding ? 0x8000U : 0U));
+            const auto decoded = spice::mld::model::decodeTriangleMetadataWord(raw);
+            ASSERT_EQ(decoded.rawWord, raw);
+            ASSERT_EQ(decoded.selectorLow15, selector);
+            ASSERT_EQ(decoded.streamWindingHighBit, winding);
+            ASSERT_EQ(decoded.onesDigit, d0);
+            ASSERT_EQ(decoded.tensDigit, d1);
+            ASSERT_EQ(decoded.hundredsDigit, d2);
+            ASSERT_EQ(decoded.thousandsDigit, d3);
+            ASSERT_EQ(decoded.ignoredTenThousandsDigit, (selector / 10000U) % 10U);
+            ASSERT_EQ(decoded.decodedU16, expected);
+            ASSERT_EQ(decoded.decodedHighBit, (expected & 0x8000U) != 0U);
+            ASSERT_EQ(decoded.decodedClassBits, (expected >> 8U) & 0x7FU);
+            ASSERT_EQ(decoded.payloadGroupBits, (expected >> 4U) & 0x0FU);
+            ASSERT_EQ(decoded.encounterSelectorBits, expected & 0x0FU);
+        }
+    }
+}
+
 TEST(GrndParser, PreservesRawTriangleMetadataAcrossWindingReversal) {
     const auto bytes = makeSyntheticGrnd();
     const auto decoded = spice::mld::parsing::GrndParser{}.decode(bytes, 0x4000U, Endian::Big);
@@ -1163,6 +1250,27 @@ TEST(GrndParser, PreservesRawTriangleMetadataAcrossWindingReversal) {
     ASSERT_EQ(decoded.mesh.triangleMetadata.size(), 1U);
     EXPECT_EQ(decoded.mesh.triangleMetadata[0].rawU16,
         (std::array<std::uint16_t, 3>{ 0x0001U, 0x7FFFU, 0x800AU }));
+}
+
+TEST(GrndParser, PreservesPartialSourceModelWhenCellReferencesDoNotResolve) {
+    constexpr std::size_t refListOffset = 0xDCU;
+    for (const auto endian : { Endian::Big, Endian::Little }) {
+        auto bytes = makeSyntheticGrnd(endian);
+        writeU16(bytes, refListOffset, 1U, endian); // one set exists, so set index one is unresolved
+        const auto decoded = spice::mld::parsing::GrndParser{}.decode(bytes, 0x4100U, endian);
+
+        EXPECT_FALSE(decoded.decoded);
+        EXPECT_EQ(decoded.skippedReferenceCount, 1U);
+        EXPECT_TRUE(decoded.mesh.indices.empty());
+        ASSERT_EQ(decoded.data.triangleSets.size(), 1U);
+        ASSERT_EQ(decoded.data.cells.size(), 1U);
+        ASSERT_EQ(decoded.data.cells[0].references.size(), 1U);
+        EXPECT_EQ(decoded.data.cells[0].references[0].triangleSet, 1U);
+        EXPECT_FALSE(decoded.data.cells[0].references[0].meshTriangleIndex.has_value());
+        EXPECT_TRUE(std::any_of(decoded.diagnostics.begin(), decoded.diagnostics.end(), [](const auto& diagnostic) {
+            return diagnostic.find("skippedRefs=1") != std::string::npos;
+        }));
+    }
 }
 
 TEST(GrndParser, BakesTriangleSetTranslationIntoCanonicalMeshForBothEndians) {
@@ -1223,6 +1331,50 @@ TEST(BlenderIrJsonExporter, EmitsRawTriangleMetadataAndVertexUserAttributesWitho
     EXPECT_EQ(json.find("collisionTriangles"), std::string::npos);
     EXPECT_EQ(json.find("selectorLow15"), std::string::npos);
     EXPECT_EQ(json.find("encounterTableId"), std::string::npos);
+}
+
+TEST(BlenderIrJsonExporter, SanitizesNonFiniteFloatsWithBoundedExactPaths) {
+    spice::mld::model::BlenderIrScene scene{};
+    spice::mld::model::BlenderIrMesh mesh{};
+    for (std::size_t i = 0; i < 40U; ++i) {
+        spice::mld::model::BlenderIrVertex vertex{};
+        vertex.position.x = std::numeric_limits<float>::quiet_NaN();
+        if (i == 0U) {
+            vertex.weights.push_back(spice::mld::model::BlenderIrWeight{
+                .boneOrNodeIndex = 0U,
+                .weight = std::numeric_limits<float>::quiet_NaN(),
+            });
+        }
+        mesh.vertices.push_back(vertex);
+    }
+    spice::mld::model::BlenderIrMaterial material{};
+    material.mipmapDistanceMultiplier = std::numeric_limits<float>::infinity();
+    mesh.materials.push_back(material);
+    spice::mld::model::BlenderIrTriangleSet triangleSet{};
+    spice::mld::model::BlenderIrCorner corner{};
+    corner.u = -std::numeric_limits<float>::infinity();
+    corner.colorA = std::numeric_limits<float>::infinity();
+    triangleSet.corners.push_back(corner);
+    mesh.triangleSets.push_back(triangleSet);
+    scene.meshes.push_back(mesh);
+    spice::mld::model::BlenderIrInstance instance{};
+    instance.transform.position.y = std::numeric_limits<float>::infinity();
+    scene.indexEntries.push_back(instance);
+    spice::mld::model::BlenderIrAnimation animation{};
+    spice::mld::model::BlenderIrAnimationChannel channel{};
+    channel.floatValues.push_back(spice::mld::model::BlenderIrFloatKeyframe{
+        .frame = 0U,
+        .value = std::numeric_limits<float>::quiet_NaN(),
+    });
+    animation.channels.push_back(channel);
+    scene.animations.push_back(animation);
+
+    const auto json = spice::mld::exporting::BlenderIrJsonExporter{}.toJson(scene);
+    EXPECT_EQ(json.find("nan"), std::string::npos);
+    EXPECT_EQ(json.find("inf"), std::string::npos);
+    EXPECT_NE(json.find("sanitized 46 non-finite"), std::string::npos);
+    EXPECT_NE(json.find("meshes[0].vertices[0].position.x"), std::string::npos);
+    EXPECT_NE(json.find("omitted 14 additional path(s)"), std::string::npos);
 }
 
 TEST(MldEntryListJsonExporter, PreservesDetailedSchemaFieldsAndEscapesStrings) {

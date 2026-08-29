@@ -1,18 +1,21 @@
 #include "../SpiceMLD/SpiceMLD.h"
 #include "../SpiceMLD/Parsing/GobjParser.h"
 #include "../SpiceMLD/Parsing/GrndParser.h"
+#include "../Compression/Aklz.h"
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <set>
 #include <span>
 #include <string>
 #include <vector>
@@ -23,6 +26,7 @@ using spice::root::Endian;
 using spice::mld::model::MldFile;
 using spice::mld::model::MldGroundResource;
 using spice::mld::patching::DreamcastTriangleSelectorEdit;
+using spice::mld::patching::TriangleSelectorEdit;
 using spice::mld::patching::TriangleResourceKind;
 
 constexpr std::size_t kGrndAddress = 0x100U;
@@ -30,20 +34,35 @@ constexpr std::size_t kGobjAddress = 0x300U;
 constexpr std::size_t kGrndStreamOffset = 0x60U;
 constexpr std::size_t kGobjPolyOffset = 0xACU;
 
-void writeU16(std::vector<std::uint8_t>& bytes, const std::size_t offset, const std::uint16_t value) {
-    bytes[offset] = static_cast<std::uint8_t>(value & 0xFFU);
-    bytes[offset + 1U] = static_cast<std::uint8_t>((value >> 8U) & 0xFFU);
+void writeU16(std::vector<std::uint8_t>& bytes, const std::size_t offset, const std::uint16_t value,
+    const Endian endian = Endian::Little) {
+    if (endian == Endian::Big) {
+        bytes[offset] = static_cast<std::uint8_t>((value >> 8U) & 0xFFU);
+        bytes[offset + 1U] = static_cast<std::uint8_t>(value & 0xFFU);
+    } else {
+        bytes[offset] = static_cast<std::uint8_t>(value & 0xFFU);
+        bytes[offset + 1U] = static_cast<std::uint8_t>((value >> 8U) & 0xFFU);
+    }
 }
 
-void writeU32(std::vector<std::uint8_t>& bytes, const std::size_t offset, const std::uint32_t value) {
-    bytes[offset] = static_cast<std::uint8_t>(value & 0xFFU);
-    bytes[offset + 1U] = static_cast<std::uint8_t>((value >> 8U) & 0xFFU);
-    bytes[offset + 2U] = static_cast<std::uint8_t>((value >> 16U) & 0xFFU);
-    bytes[offset + 3U] = static_cast<std::uint8_t>((value >> 24U) & 0xFFU);
+void writeU32(std::vector<std::uint8_t>& bytes, const std::size_t offset, const std::uint32_t value,
+    const Endian endian = Endian::Little) {
+    if (endian == Endian::Big) {
+        bytes[offset] = static_cast<std::uint8_t>((value >> 24U) & 0xFFU);
+        bytes[offset + 1U] = static_cast<std::uint8_t>((value >> 16U) & 0xFFU);
+        bytes[offset + 2U] = static_cast<std::uint8_t>((value >> 8U) & 0xFFU);
+        bytes[offset + 3U] = static_cast<std::uint8_t>(value & 0xFFU);
+    } else {
+        bytes[offset] = static_cast<std::uint8_t>(value & 0xFFU);
+        bytes[offset + 1U] = static_cast<std::uint8_t>((value >> 8U) & 0xFFU);
+        bytes[offset + 2U] = static_cast<std::uint8_t>((value >> 16U) & 0xFFU);
+        bytes[offset + 3U] = static_cast<std::uint8_t>((value >> 24U) & 0xFFU);
+    }
 }
 
-void writeF32(std::vector<std::uint8_t>& bytes, const std::size_t offset, const float value) {
-    writeU32(bytes, offset, std::bit_cast<std::uint32_t>(value));
+void writeF32(std::vector<std::uint8_t>& bytes, const std::size_t offset, const float value,
+    const Endian endian = Endian::Little) {
+    writeU32(bytes, offset, std::bit_cast<std::uint32_t>(value), endian);
 }
 
 void writeTag(std::vector<std::uint8_t>& bytes, const std::size_t offset, const char* tag) {
@@ -52,7 +71,7 @@ void writeTag(std::vector<std::uint8_t>& bytes, const std::size_t offset, const 
     }
 }
 
-std::vector<std::uint8_t> makeDreamcastGrnd() {
+std::vector<std::uint8_t> makeDreamcastGrnd(const Endian endian = Endian::Little) {
     constexpr std::size_t innerHeader = 0x10U;
     constexpr std::size_t triangleSetsOffset = 0x40U;
     constexpr std::size_t vertexOffset = 0x80U;
@@ -63,90 +82,110 @@ std::vector<std::uint8_t> makeDreamcastGrnd() {
 
     std::vector<std::uint8_t> bytes(declaredSize, 0U);
     writeTag(bytes, 0U, "GRND");
-    writeU32(bytes, 4U, static_cast<std::uint32_t>(declaredSize));
-    writeU32(bytes, innerHeader, static_cast<std::uint32_t>(triangleSetsOffset - innerHeader));
-    writeU32(bytes, innerHeader + 4U, static_cast<std::uint32_t>(quadRegistryOffset - innerHeader));
-    writeU16(bytes, innerHeader + 0x10U, 1U);
-    writeU16(bytes, innerHeader + 0x12U, 1U);
-    writeU16(bytes, innerHeader + 0x14U, 1U);
-    writeU16(bytes, innerHeader + 0x16U, 1U);
-    writeU16(bytes, innerHeader + 0x18U, 1U);
-    writeU16(bytes, innerHeader + 0x1AU, 1U);
+    writeU32(bytes, 4U, static_cast<std::uint32_t>(declaredSize), endian);
+    writeU32(bytes, innerHeader, static_cast<std::uint32_t>(triangleSetsOffset - innerHeader), endian);
+    writeU32(bytes, innerHeader + 4U, static_cast<std::uint32_t>(quadRegistryOffset - innerHeader), endian);
+    writeU16(bytes, innerHeader + 0x10U, 1U, endian);
+    writeU16(bytes, innerHeader + 0x12U, 1U, endian);
+    writeU16(bytes, innerHeader + 0x14U, 1U, endian);
+    writeU16(bytes, innerHeader + 0x16U, 1U, endian);
+    writeU16(bytes, innerHeader + 0x18U, 1U, endian);
+    writeU16(bytes, innerHeader + 0x1AU, 1U, endian);
 
     writeU32(bytes, triangleSetsOffset + 0x0CU,
-        static_cast<std::uint32_t>(vertexOffset - (triangleSetsOffset + 0x0CU)));
+        static_cast<std::uint32_t>(vertexOffset - (triangleSetsOffset + 0x0CU)), endian);
     writeU32(bytes, triangleSetsOffset + 0x10U,
-        static_cast<std::uint32_t>(kGrndStreamOffset - (triangleSetsOffset + 0x10U)));
-    writeU32(bytes, triangleSetsOffset + 0x14U, 1U);
+        static_cast<std::uint32_t>(kGrndStreamOffset - (triangleSetsOffset + 0x10U)), endian);
+    writeU32(bytes, triangleSetsOffset + 0x14U, 1U, endian);
     constexpr std::array<std::uint16_t, 3> flags{ 1U, 2U, 0x800AU };
     for (std::size_t i = 0; i < 3U; ++i) {
-        writeU16(bytes, kGrndStreamOffset + i * 4U, static_cast<std::uint16_t>(i * 6U));
-        writeU16(bytes, kGrndStreamOffset + i * 4U + 2U, flags[i]);
+        writeU16(bytes, kGrndStreamOffset + i * 4U, static_cast<std::uint16_t>(i * 6U), endian);
+        writeU16(bytes, kGrndStreamOffset + i * 4U + 2U, flags[i], endian);
         const auto vertex = vertexOffset + i * 24U;
-        writeF32(bytes, vertex + 0U, static_cast<float>(i));
-        writeF32(bytes, vertex + 4U, static_cast<float>(i == 1U));
-        writeF32(bytes, vertex + 8U, static_cast<float>(i == 2U));
-        writeF32(bytes, vertex + 16U, 1.0F);
+        writeF32(bytes, vertex + 0U, static_cast<float>(i), endian);
+        writeF32(bytes, vertex + 4U, static_cast<float>(i == 1U), endian);
+        writeF32(bytes, vertex + 8U, static_cast<float>(i == 2U), endian);
+        writeF32(bytes, vertex + 16U, 1.0F, endian);
     }
-    writeU32(bytes, quadTableOffset, 1U);
+    writeU32(bytes, quadTableOffset, 1U, endian);
     writeU32(bytes, quadTableOffset + 4U,
-        static_cast<std::uint32_t>(refListOffset - (quadTableOffset + 4U)));
-    writeU16(bytes, refListOffset, 0U);
-    writeU16(bytes, refListOffset + 2U, 0U);
+        static_cast<std::uint32_t>(refListOffset - (quadTableOffset + 4U)), endian);
+    writeU16(bytes, refListOffset, 0U, endian);
+    writeU16(bytes, refListOffset + 2U, 0U, endian);
     return bytes;
 }
 
-std::vector<std::uint8_t> makeDreamcastGobj() {
+std::vector<std::uint8_t> makeDreamcastGobj(
+    const Endian endian = Endian::Little,
+    const bool normalDiffuse = false) {
     constexpr std::size_t nodeOffset = 0x10U;
     constexpr std::size_t attachOffset = 0x50U;
     constexpr std::size_t payloadOffset = attachOffset + 0x10U;
     constexpr std::size_t vertexOffset = 0xC0U;
     constexpr std::size_t vertexCount = 4U;
-    constexpr std::size_t recordWords = 3U;
+    const std::size_t recordWords = normalDiffuse ? 7U : 3U;
     const auto declaredSize = vertexOffset + 8U + vertexCount * recordWords * 4U;
 
     std::vector<std::uint8_t> bytes(declaredSize, 0U);
     writeTag(bytes, 0U, "GOBJ");
-    writeU32(bytes, 4U, static_cast<std::uint32_t>(declaredSize));
-    writeU32(bytes, nodeOffset, static_cast<std::uint32_t>(attachOffset - nodeOffset));
-    writeF32(bytes, nodeOffset + 0x20U, 1.0F);
-    writeF32(bytes, nodeOffset + 0x24U, 1.0F);
-    writeF32(bytes, nodeOffset + 0x28U, 1.0F);
-    writeU32(bytes, payloadOffset, static_cast<std::uint32_t>(vertexOffset - payloadOffset));
+    writeU32(bytes, 4U, static_cast<std::uint32_t>(declaredSize), endian);
+    writeU32(bytes, nodeOffset, static_cast<std::uint32_t>(attachOffset - nodeOffset), endian);
+    writeF32(bytes, nodeOffset + 0x20U, 1.0F, endian);
+    writeF32(bytes, nodeOffset + 0x24U, 1.0F, endian);
+    writeF32(bytes, nodeOffset + 0x28U, 1.0F, endian);
+    writeU32(bytes, payloadOffset, static_cast<std::uint32_t>(vertexOffset - payloadOffset), endian);
 
     constexpr std::array<std::uint16_t, 4> flags{ 1U, 2U, 0x800AU, 70U };
     for (std::size_t i = 0; i < vertexCount; ++i) {
-        writeU16(bytes, kGobjPolyOffset + i * 4U, static_cast<std::uint16_t>(2U + i * recordWords));
-        writeU16(bytes, kGobjPolyOffset + i * 4U + 2U, flags[i]);
+        writeU16(bytes, kGobjPolyOffset + i * 4U, static_cast<std::uint16_t>(2U + i * recordWords), endian);
+        writeU16(bytes, kGobjPolyOffset + i * 4U + 2U, flags[i], endian);
     }
-    writeU16(bytes, kGobjPolyOffset + vertexCount * 4U, 0xFFFFU);
-    writeU16(bytes, kGobjPolyOffset + vertexCount * 4U + 2U, 0xFFFFU);
+    writeU16(bytes, kGobjPolyOffset + vertexCount * 4U, 0xFFFFU, endian);
+    writeU16(bytes, kGobjPolyOffset + vertexCount * 4U + 2U, 0xFFFFU, endian);
 
-    writeU32(bytes, vertexOffset, 0x22U);
-    writeU32(bytes, vertexOffset + 4U, static_cast<std::uint32_t>(vertexCount << 16U));
+    writeU32(bytes, vertexOffset, normalDiffuse ? 0x2AU : 0x22U, endian);
+    writeU32(bytes, vertexOffset + 4U, static_cast<std::uint32_t>(vertexCount << 16U), endian);
     for (std::size_t i = 0; i < vertexCount; ++i) {
         const auto vertex = vertexOffset + 8U + i * recordWords * 4U;
-        writeF32(bytes, vertex + 0U, static_cast<float>(i));
-        writeF32(bytes, vertex + 4U, static_cast<float>(i + 1U));
-        writeF32(bytes, vertex + 8U, static_cast<float>(i + 2U));
+        writeF32(bytes, vertex + 0U, static_cast<float>(i), endian);
+        writeF32(bytes, vertex + 4U, static_cast<float>(i + 1U), endian);
+        writeF32(bytes, vertex + 8U, static_cast<float>(i + 2U), endian);
+        if (normalDiffuse) {
+            writeF32(bytes, vertex + 12U, 0.0F, endian);
+            writeF32(bytes, vertex + 16U, 1.0F, endian);
+            writeF32(bytes, vertex + 20U, 0.0F, endian);
+            writeU32(bytes, vertex + 24U, 0x10203040U + static_cast<std::uint32_t>(i), endian);
+        }
     }
     return bytes;
 }
 
-MldFile makeMixedDreamcastFile() {
-    const auto grndBytes = makeDreamcastGrnd();
-    const auto gobjBytes = makeDreamcastGobj();
+MldFile makeMixedFile(
+    const spice::mld::model::TargetPlatform platform,
+    const Endian endian,
+    const bool compressedAklz,
+    const bool normalDiffuseGobj = false) {
+    const auto grndBytes = makeDreamcastGrnd(endian);
+    const auto gobjBytes = makeDreamcastGobj(endian, normalDiffuseGobj);
     MldFile file{};
     file.parseStatus = spice::mld::model::MldParseStatus::Complete;
-    file.sourcePlatform = spice::mld::model::TargetPlatform::Dreamcast;
-    file.endian = Endian::Little;
-    file.sourceBytes.assign(kGobjAddress + gobjBytes.size() + 0x20U, 0xCCU);
-    std::copy(grndBytes.begin(), grndBytes.end(), file.sourceBytes.begin() + static_cast<std::ptrdiff_t>(kGrndAddress));
-    std::copy(gobjBytes.begin(), gobjBytes.end(), file.sourceBytes.begin() + static_cast<std::ptrdiff_t>(kGobjAddress));
-    file.decodedBytes = file.sourceBytes;
-    file.originalBytes = file.sourceBytes;
+    file.sourcePlatform = platform;
+    file.endian = endian;
+    file.sourceWasCompressedAklz = compressedAklz;
+    file.decodedBytes.assign(kGobjAddress + gobjBytes.size() + 0x20U, 0xCCU);
+    std::copy(grndBytes.begin(), grndBytes.end(), file.decodedBytes.begin() + static_cast<std::ptrdiff_t>(kGrndAddress));
+    std::copy(gobjBytes.begin(), gobjBytes.end(), file.decodedBytes.begin() + static_cast<std::ptrdiff_t>(kGobjAddress));
+    file.originalBytes = file.decodedBytes;
+    if (compressedAklz) {
+        const auto compressed = spice::compression::aklz::compress(file.decodedBytes);
+        EXPECT_TRUE(compressed.ok());
+        file.sourceBytes = compressed.bytes;
+    } else {
+        file.sourceBytes = file.decodedBytes;
+    }
 
-    auto grnd = spice::mld::parsing::GrndParser{}.decode(grndBytes, static_cast<std::uint32_t>(kGrndAddress), Endian::Little);
+    auto grnd = spice::mld::parsing::GrndParser{}.decode(
+        grndBytes, static_cast<std::uint32_t>(kGrndAddress), endian);
     EXPECT_TRUE(grnd.decoded);
     MldGroundResource grndResource{};
     grndResource.kind = MldGroundResource::Kind::Grnd;
@@ -158,7 +197,8 @@ MldFile makeMixedDreamcastFile() {
     grndResource.originalSemanticHash = spice::mld::model::semanticHash(*grndResource.grnd);
     file.groundResources.emplace(grndResource.sourceAddress, std::move(grndResource));
 
-    auto gobj = spice::mld::parsing::GobjParser{}.decode(gobjBytes, static_cast<std::uint32_t>(kGobjAddress), Endian::Little);
+    auto gobj = spice::mld::parsing::GobjParser{}.decode(
+        gobjBytes, static_cast<std::uint32_t>(kGobjAddress), endian);
     EXPECT_TRUE(gobj.decoded);
     MldGroundResource gobjResource{};
     gobjResource.kind = MldGroundResource::Kind::Gobj;
@@ -170,6 +210,14 @@ MldFile makeMixedDreamcastFile() {
     gobjResource.originalSemanticHash = spice::mld::model::semanticHash(*gobjResource.gobj);
     file.groundResources.emplace(gobjResource.sourceAddress, std::move(gobjResource));
     return file;
+}
+
+MldFile makeMixedDreamcastFile() {
+    return makeMixedFile(spice::mld::model::TargetPlatform::Dreamcast, Endian::Little, false);
+}
+
+MldFile makeMixedGameCubeFile(const bool compressedAklz) {
+    return makeMixedFile(spice::mld::model::TargetPlatform::GameCube, Endian::Big, compressedAklz);
 }
 
 std::vector<std::uint8_t> readFile(const std::filesystem::path& path) {
@@ -201,6 +249,107 @@ void hashWord(std::uint64_t& hash, const std::uint64_t value) {
         hash ^= static_cast<std::uint8_t>(value >> shift);
         hash *= 1099511628211ULL;
     }
+}
+
+bool isGroundCorpusMld(const std::filesystem::path& path) {
+    auto extension = path.extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(), [](const unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (extension != ".mld") {
+        return false;
+    }
+    auto stem = path.stem().string();
+    std::transform(stem.begin(), stem.end(), stem.begin(), [](const unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (stem.size() != 5U || stem[0] != 'a' || !std::isdigit(static_cast<unsigned char>(stem[1])) ||
+        !std::isdigit(static_cast<unsigned char>(stem[2])) || !std::isdigit(static_cast<unsigned char>(stem[3])) ||
+        !std::isalpha(static_cast<unsigned char>(stem[4]))) {
+        return false;
+    }
+    const auto number = static_cast<unsigned>((stem[1] - '0') * 100 + (stem[2] - '0') * 10 + (stem[3] - '0'));
+    return number <= 199U;
+}
+
+struct GroundCorpusCounts {
+    std::size_t files = 0U;
+    std::size_t triangles = 0U;
+    std::size_t normalDiffuseResources = 0U;
+    std::size_t normalDiffuseTriangles = 0U;
+    std::size_t selectorEightTriangles = 0U;
+    std::size_t noReferenceGrndResources = 0U;
+    std::set<std::uint16_t> low15Values{};
+};
+
+GroundCorpusCounts scanGroundCorpus(const std::vector<std::filesystem::path>& roots) {
+    GroundCorpusCounts counts{};
+    for (const auto& root : roots) {
+        std::vector<std::filesystem::path> files{};
+        for (const auto& item : std::filesystem::directory_iterator(root)) {
+            if (item.is_regular_file() && isGroundCorpusMld(item.path())) {
+                files.push_back(item.path());
+            }
+        }
+        std::sort(files.begin(), files.end());
+        for (const auto& path : files) {
+            const auto file = spice::mld::parsing::MldParser{}.parseBytes(readFile(path));
+            ++counts.files;
+            std::set<std::uint32_t> groundAddresses{};
+            for (const auto& record : file.entries) {
+                if (record.entry.groundAddresses) {
+                    groundAddresses.insert(record.entry.groundAddresses->values.begin(),
+                        record.entry.groundAddresses->values.end());
+                }
+            }
+            for (const auto address : groundAddresses) {
+                const auto found = file.groundResources.find(address);
+                if (found == file.groundResources.end()) {
+                    continue;
+                }
+                const auto& resource = found->second;
+                if (resource.grnd.has_value()) {
+                    const auto& grnd = *resource.grnd;
+                    if (grnd.mesh.triangleMetadata.empty() && grnd.triangleSets.size() == 3U && !grnd.cells.empty()) {
+                        ++counts.noReferenceGrndResources;
+                    }
+                    for (const auto& metadata : grnd.mesh.triangleMetadata) {
+                        const auto low15 = static_cast<std::uint16_t>(metadata.rawU16[2] & 0x7FFFU);
+                        ++counts.triangles;
+                        counts.low15Values.insert(low15);
+                        if (((low15 / 10U) % 10U) == 8U) {
+                            ++counts.selectorEightTriangles;
+                        }
+                    }
+                }
+                if (resource.gobj.has_value()) {
+                    bool resourceHasNormalDiffuse = false;
+                    std::size_t resourceNormalDiffuseTriangles = 0U;
+                    for (const auto& node : resource.gobj->nodes) {
+                        const bool nodeNormalDiffuse = node.attach.has_value() &&
+                            node.attach->vertexChunk.chunkType == 0x2AU;
+                        resourceHasNormalDiffuse = resourceHasNormalDiffuse || nodeNormalDiffuse;
+                        if (nodeNormalDiffuse) {
+                            resourceNormalDiffuseTriangles += node.streamMesh.triangleMetadata.size();
+                        }
+                        for (const auto& metadata : node.streamMesh.triangleMetadata) {
+                            const auto low15 = static_cast<std::uint16_t>(metadata.rawU16[2] & 0x7FFFU);
+                            ++counts.triangles;
+                            counts.low15Values.insert(low15);
+                            if (((low15 / 10U) % 10U) == 8U) {
+                                ++counts.selectorEightTriangles;
+                            }
+                        }
+                    }
+                    if (resourceHasNormalDiffuse) {
+                        ++counts.normalDiffuseResources;
+                        counts.normalDiffuseTriangles += resourceNormalDiffuseTriangles;
+                    }
+                }
+            }
+        }
+    }
+    return counts;
 }
 
 } // namespace
@@ -256,7 +405,7 @@ TEST(MldPatching, PlansAndAppliesMixedGrndAndGobjSelectorEdits) {
     EXPECT_EQ(patched.size(), file.sourceBytes.size());
     for (std::size_t i = 0; i < patched.size(); ++i) {
         const bool inPatch = std::any_of(plan.patches.begin(), plan.patches.end(), [&](const auto& patch) {
-            return i >= patch.fileOffset && i < patch.fileOffset + 2U;
+            return i >= patch.decodedPayloadOffset && i < patch.decodedPayloadOffset + 2U;
         });
         if (!inPatch) {
             EXPECT_EQ(patched[i], file.sourceBytes[i]) << "unexpected change at " << i;
@@ -276,6 +425,158 @@ TEST(MldPatching, PlansAndAppliesMixedGrndAndGobjSelectorEdits) {
     ASSERT_EQ(reparsedGobj.data.nodes[0].streamMesh.triangleMetadata.size(), 2U);
     EXPECT_EQ(((reparsedGobj.data.nodes[0].streamMesh.triangleMetadata[0].rawU16[2] & 0x7FFFU) / 10U) % 10U, 9U);
     EXPECT_EQ(((reparsedGobj.data.nodes[0].streamMesh.triangleMetadata[1].rawU16[2] & 0x7FFFU) / 10U) % 10U, 7U);
+}
+
+TEST(MldPatching, PatchesNormalDiffuseGobjWithoutChangingVertexColors) {
+    const auto file = makeMixedFile(
+        spice::mld::model::TargetPlatform::Dreamcast, Endian::Little, false, true);
+    const auto& beforeMesh = file.groundResources.at(static_cast<std::uint32_t>(kGobjAddress))
+        .gobj->nodes[0].streamMesh;
+    ASSERT_FALSE(beforeMesh.vertices.empty());
+    ASSERT_TRUE(beforeMesh.vertices[0].diffuseColor.has_value());
+
+    const TriangleSelectorEdit edit{
+        .resourceKind = TriangleResourceKind::Gobj,
+        .resourceAddress = static_cast<std::uint32_t>(kGobjAddress),
+        .gobjNodeIndex = 0U,
+        .triangleIndex = 0U,
+        .selectorDigit = 8U,
+    };
+    const auto plan = spice::mld::patching::planTriangleSelectorPatches(file, std::span{ &edit, 1U });
+    ASSERT_TRUE(plan.ok());
+    ASSERT_EQ(plan.patches.size(), 1U);
+    const auto materialized = spice::mld::patching::materializeMldPatchPlan(file.sourceBytes, plan);
+    ASSERT_TRUE(materialized.ok());
+    for (std::size_t i = 0; i < materialized.bytes.size(); ++i) {
+        const bool changed = i >= plan.patches[0].decodedPayloadOffset &&
+            i < plan.patches[0].decodedPayloadOffset + 2U;
+        if (!changed) {
+            EXPECT_EQ(materialized.bytes[i], file.sourceBytes[i]);
+        }
+    }
+
+    const auto gobjBytes = makeDreamcastGobj(Endian::Little, true);
+    const auto reparsed = spice::mld::parsing::GobjParser{}.decode(
+        std::span<const std::uint8_t>(materialized.bytes).subspan(kGobjAddress, gobjBytes.size()),
+        static_cast<std::uint32_t>(kGobjAddress), Endian::Little);
+    ASSERT_FALSE(reparsed.data.nodes.empty());
+    const auto& afterMesh = reparsed.data.nodes[0].streamMesh;
+    ASSERT_EQ(afterMesh.vertices.size(), beforeMesh.vertices.size());
+    for (std::size_t i = 0; i < afterMesh.vertices.size(); ++i) {
+        ASSERT_TRUE(afterMesh.vertices[i].diffuseColor.has_value());
+        ASSERT_TRUE(beforeMesh.vertices[i].diffuseColor.has_value());
+        EXPECT_EQ(afterMesh.vertices[i].diffuseColor->r, beforeMesh.vertices[i].diffuseColor->r);
+        EXPECT_EQ(afterMesh.vertices[i].diffuseColor->g, beforeMesh.vertices[i].diffuseColor->g);
+        EXPECT_EQ(afterMesh.vertices[i].diffuseColor->b, beforeMesh.vertices[i].diffuseColor->b);
+        EXPECT_EQ(afterMesh.vertices[i].diffuseColor->a, beforeMesh.vertices[i].diffuseColor->a);
+    }
+    EXPECT_EQ(spice::mld::model::decodeTriangleMetadataWord(
+        afterMesh.triangleMetadata[0].rawU16[2]).tensDigit, 8U);
+}
+
+TEST(MldPatching, PlansAndMaterializesBigEndianGameCubeEdits) {
+    const auto file = makeMixedGameCubeFile(false);
+    const TriangleSelectorEdit edit{
+        .resourceKind = TriangleResourceKind::Grnd,
+        .resourceAddress = static_cast<std::uint32_t>(kGrndAddress),
+        .triangleIndex = 0U,
+        .selectorDigit = 8U,
+    };
+    const auto plan = spice::mld::patching::planTriangleSelectorPatches(
+        file, std::span{ &edit, 1U });
+    ASSERT_TRUE(plan.ok());
+    ASSERT_EQ(plan.patches.size(), 1U);
+    EXPECT_EQ(plan.endian, Endian::Big);
+    EXPECT_FALSE(plan.sourceWasCompressedAklz);
+    EXPECT_EQ(plan.patches[0].expectedBytes, (std::array<std::uint8_t, 2>{ 0x80U, 0x0AU }));
+    EXPECT_EQ(plan.patches[0].replacementBytes, (std::array<std::uint8_t, 2>{ 0x80U, 0x50U }));
+
+    const auto materialized = spice::mld::patching::materializeMldPatchPlan(file.sourceBytes, plan);
+    ASSERT_TRUE(materialized.ok());
+    EXPECT_EQ(materialized.appliedPatchCount, 1U);
+    EXPECT_EQ(materialized.bytes.size(), file.sourceBytes.size());
+    for (std::size_t i = 0; i < materialized.bytes.size(); ++i) {
+        const bool changed = i >= plan.patches[0].decodedPayloadOffset &&
+            i < plan.patches[0].decodedPayloadOffset + 2U;
+        if (!changed) {
+            EXPECT_EQ(materialized.bytes[i], file.sourceBytes[i]);
+        }
+    }
+
+    const auto reparsed = spice::mld::parsing::GrndParser{}.decode(
+        std::span<const std::uint8_t>(materialized.bytes).subspan(kGrndAddress, makeDreamcastGrnd(Endian::Big).size()),
+        static_cast<std::uint32_t>(kGrndAddress), Endian::Big);
+    ASSERT_EQ(reparsed.data.mesh.triangleMetadata.size(), 1U);
+    EXPECT_EQ(spice::mld::model::decodeTriangleMetadataWord(
+        reparsed.data.mesh.triangleMetadata[0].rawU16[2]).tensDigit, 8U);
+}
+
+TEST(MldPatching, MaterializesAklzGameCubeEditsAndPreservesNoOpsExactly) {
+    const auto file = makeMixedGameCubeFile(true);
+    TriangleSelectorEdit edit{
+        .resourceKind = TriangleResourceKind::Gobj,
+        .resourceAddress = static_cast<std::uint32_t>(kGobjAddress),
+        .gobjNodeIndex = 0U,
+        .triangleIndex = 0U,
+        .selectorDigit = 9U,
+    };
+    const auto plan = spice::mld::patching::planTriangleSelectorPatches(
+        file, std::span{ &edit, 1U });
+    ASSERT_TRUE(plan.ok());
+    ASSERT_EQ(plan.patches.size(), 1U);
+    EXPECT_TRUE(plan.sourceWasCompressedAklz);
+
+    const auto materialized = spice::mld::patching::materializeMldPatchPlan(file.sourceBytes, plan);
+    ASSERT_TRUE(materialized.ok());
+    ASSERT_TRUE(spice::compression::aklz::isAklz(materialized.bytes));
+    const auto decoded = spice::compression::aklz::decompress(materialized.bytes);
+    ASSERT_TRUE(decoded.ok());
+    ASSERT_EQ(decoded.bytes.size(), file.decodedBytes.size());
+    for (std::size_t i = 0; i < decoded.bytes.size(); ++i) {
+        const bool changed = i >= plan.patches[0].decodedPayloadOffset &&
+            i < plan.patches[0].decodedPayloadOffset + 2U;
+        if (!changed) {
+            EXPECT_EQ(decoded.bytes[i], file.decodedBytes[i]);
+        }
+    }
+
+    const auto reparsed = spice::mld::parsing::GobjParser{}.decode(
+        std::span<const std::uint8_t>(decoded.bytes).subspan(kGobjAddress, makeDreamcastGobj(Endian::Big).size()),
+        static_cast<std::uint32_t>(kGobjAddress), Endian::Big);
+    ASSERT_FALSE(reparsed.data.nodes.empty());
+    EXPECT_EQ(spice::mld::model::decodeTriangleMetadataWord(
+        reparsed.data.nodes[0].streamMesh.triangleMetadata[0].rawU16[2]).tensDigit, 9U);
+
+    edit.resourceKind = TriangleResourceKind::Grnd;
+    edit.resourceAddress = static_cast<std::uint32_t>(kGrndAddress);
+    edit.gobjNodeIndex.reset();
+    edit.selectorDigit = 1U;
+    const auto noOp = spice::mld::patching::planTriangleSelectorPatches(file, std::span{ &edit, 1U });
+    ASSERT_TRUE(noOp.ok());
+    ASSERT_TRUE(noOp.patches.empty());
+    const auto unchanged = spice::mld::patching::materializeMldPatchPlan(file.sourceBytes, noOp);
+    ASSERT_TRUE(unchanged.ok());
+    EXPECT_EQ(unchanged.bytes, file.sourceBytes);
+}
+
+TEST(MldPatching, RejectsStaleDecodedBytesInsideAklzSource) {
+    const auto file = makeMixedGameCubeFile(true);
+    const TriangleSelectorEdit edit{
+        .resourceKind = TriangleResourceKind::Grnd,
+        .resourceAddress = static_cast<std::uint32_t>(kGrndAddress),
+        .triangleIndex = 0U,
+        .selectorDigit = 8U,
+    };
+    const auto plan = spice::mld::patching::planTriangleSelectorPatches(file, std::span{ &edit, 1U });
+    ASSERT_TRUE(plan.ok());
+    auto staleDecoded = file.decodedBytes;
+    staleDecoded[plan.patches[0].decodedPayloadOffset] ^= 0x01U;
+    const auto staleCompressed = spice::compression::aklz::compress(staleDecoded);
+    ASSERT_TRUE(staleCompressed.ok());
+    const auto materialized = spice::mld::patching::materializeMldPatchPlan(staleCompressed.bytes, plan);
+    EXPECT_FALSE(materialized.ok());
+    EXPECT_TRUE(materialized.bytes.empty());
+    EXPECT_EQ(materialized.appliedPatchCount, 0U);
 }
 
 TEST(MldPatching, AllowsEverySelectorDigitWithoutAreaOrResourcePolicy) {
@@ -362,7 +663,7 @@ TEST(MldPatching, AppliesAtomicallyWhenExpectedBytesAreStale) {
     ASSERT_EQ(plan.patches.size(), 2U);
 
     auto stale = file.sourceBytes;
-    stale[plan.patches[1].fileOffset] ^= 0x01U;
+    stale[plan.patches[1].decodedPayloadOffset] ^= 0x01U;
     const auto before = stale;
     const auto applied = spice::mld::patching::applyMldPatchPlan(stale, plan);
     EXPECT_FALSE(applied.ok());
@@ -411,12 +712,12 @@ TEST(MldPatching, RejectsWrongResourceShapeAndOverlappingPatchRecords) {
 
     spice::mld::patching::MldPatchPlan overlap{};
     overlap.patches.push_back(spice::mld::patching::MldBytePatch{
-        .fileOffset = 4U,
+        .decodedPayloadOffset = 4U,
         .expectedBytes = { 0U, 0U },
         .replacementBytes = { 1U, 0U },
     });
     overlap.patches.push_back(spice::mld::patching::MldBytePatch{
-        .fileOffset = 5U,
+        .decodedPayloadOffset = 5U,
         .expectedBytes = { 0U, 0U },
         .replacementBytes = { 2U, 0U },
     });
@@ -438,6 +739,39 @@ TEST(MldPatching, RejectsStaleProvenanceAfterSemanticModelEdits) {
     };
     EXPECT_FALSE(spice::mld::patching::planDreamcastTriangleSelectorPatches(
         file, std::span{ &edit, 1U }).ok());
+}
+
+TEST(MldGroundMetadataCorpus, MatchesGameCubeAndDreamcastResearchInventories) {
+    const std::vector<std::filesystem::path> gameCubeRoots{
+        R"(D:\SoAGC\2002-12-19-gc-us-final_Skies_of_Arcadia_Legends\field)",
+    };
+    const std::vector<std::filesystem::path> dreamcastRoots{
+        R"(D:\SoADC\SoA(Eu)Disc1Assets\FIELD)",
+        R"(D:\SoADC\SoA(Eu)Disc2Assets\FIELD)",
+    };
+    if (!std::filesystem::exists(gameCubeRoots[0]) || !std::filesystem::exists(dreamcastRoots[0]) ||
+        !std::filesystem::exists(dreamcastRoots[1])) {
+        GTEST_SKIP() << "GameCube US and Dreamcast EU field corpora are not available on this machine";
+    }
+
+    const auto gameCube = scanGroundCorpus(gameCubeRoots);
+    EXPECT_EQ(gameCube.files, 157U);
+    EXPECT_EQ(gameCube.triangles, 383431U);
+    EXPECT_EQ(gameCube.low15Values.size(), 140U);
+    EXPECT_EQ(gameCube.normalDiffuseResources, 196U);
+    EXPECT_EQ(gameCube.normalDiffuseTriangles, 1565U);
+    EXPECT_EQ(gameCube.selectorEightTriangles, 11172U);
+    EXPECT_EQ(gameCube.noReferenceGrndResources, 17U);
+
+    const auto dreamcast = scanGroundCorpus(dreamcastRoots);
+    EXPECT_EQ(dreamcast.files, 215U);
+    EXPECT_EQ(dreamcast.triangles, 463446U);
+    EXPECT_EQ(dreamcast.low15Values.size(), 140U);
+    EXPECT_EQ(dreamcast.low15Values, gameCube.low15Values);
+    EXPECT_EQ(dreamcast.normalDiffuseResources, 327U);
+    EXPECT_EQ(dreamcast.normalDiffuseTriangles, 2546U);
+    EXPECT_EQ(dreamcast.selectorEightTriangles, 12788U);
+    EXPECT_EQ(dreamcast.noReferenceGrndResources, 25U);
 }
 
 TEST(MldPatchingCorpus, ResolvesRealDreamcastGrndAndGobjPatchOffsets) {
@@ -495,7 +829,7 @@ TEST(MldPatchingCorpus, ResolvesRealDreamcastGrndAndGobjPatchOffsets) {
                         file, std::span{ &edit, 1U });
                     ASSERT_TRUE(plan.ok()) << path.string();
                     ASSERT_EQ(plan.patches.size(), 1U) << path.string();
-                    hashWord(patchHash, plan.patches[0].fileOffset);
+                    hashWord(patchHash, plan.patches[0].decodedPayloadOffset);
                     hashWord(patchHash, plan.patches[0].expectedBytes[0]);
                     hashWord(patchHash, plan.patches[0].expectedBytes[1]);
                     hashWord(patchHash, plan.patches[0].replacementBytes[0]);
@@ -530,7 +864,7 @@ TEST(MldPatchingCorpus, ResolvesRealDreamcastGrndAndGobjPatchOffsets) {
                             file, std::span{ &edit, 1U });
                         ASSERT_TRUE(plan.ok()) << path.string();
                         ASSERT_EQ(plan.patches.size(), 1U) << path.string();
-                        hashWord(patchHash, plan.patches[0].fileOffset);
+                        hashWord(patchHash, plan.patches[0].decodedPayloadOffset);
                         hashWord(patchHash, plan.patches[0].expectedBytes[0]);
                         hashWord(patchHash, plan.patches[0].expectedBytes[1]);
                         hashWord(patchHash, plan.patches[0].replacementBytes[0]);
