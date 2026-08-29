@@ -1,6 +1,7 @@
 #include "../SpiceMix/Documents/GvrDocumentSession.h"
 #include "../SpiceMix/Documents/MldDocumentSession.h"
 #include "../SpiceMix/Documents/PvrDocumentSession.h"
+#include "../SpiceMix/Documents/SstSmlDocumentSession.h"
 #include "../SpiceGvm/Encoding/GvrEncoder.h"
 #include "../SpiceGvm/Image/PngCodec.h"
 #include "../SpicePvm/Encoding/PvrEncoder.h"
@@ -26,6 +27,11 @@ void writeU32Be(std::vector<std::uint8_t>& bytes, const std::size_t offset, cons
     bytes[offset + 1U] = static_cast<std::uint8_t>(value >> 16U);
     bytes[offset + 2U] = static_cast<std::uint8_t>(value >> 8U);
     bytes[offset + 3U] = static_cast<std::uint8_t>(value);
+}
+
+void writeU16Be(std::vector<std::uint8_t>& bytes, const std::size_t offset, const std::uint16_t value) {
+    bytes[offset] = static_cast<std::uint8_t>(value >> 8U);
+    bytes[offset + 1U] = static_cast<std::uint8_t>(value);
 }
 
 void writeU32Le(std::vector<std::uint8_t>& bytes, const std::size_t offset, const std::uint32_t value) {
@@ -111,6 +117,41 @@ std::vector<std::uint8_t> makeTwoTextureMld() {
     }
     bytes.insert(bytes.end(), first.begin(), first.end());
     bytes.insert(bytes.end(), second.begin(), second.end());
+    return bytes;
+}
+
+std::vector<std::uint8_t> makeSmlPairMember(const std::span<const std::uint8_t> embeddedMld) {
+    std::vector<std::uint8_t> bytes(0x20U + embeddedMld.size(), 0U);
+    writeU32Be(bytes, 0x00U, 0x534D4C30U);
+    writeU32Be(bytes, 0x04U, 0x0001FFFFU);
+    writeU32Be(bytes, 0x08U, 0x00000100U);
+    writeU32Be(bytes, 0x0CU, 0x20U);
+    writeU32Be(bytes, 0x10U, static_cast<std::uint32_t>(embeddedMld.size()));
+    writeU32Be(bytes, 0x14U, 0x11111111U);
+    std::copy(embeddedMld.begin(), embeddedMld.end(), bytes.begin() + 0x20U);
+    return bytes;
+}
+
+std::vector<std::uint8_t> makeSstPairMember() {
+    std::vector<std::uint8_t> bytes(0x60U, 0U);
+    writeU32Be(bytes, 0x00U, 0xAAA00000U);
+    writeU32Be(bytes, 0x04U, 0x0001FFFFU);
+    writeU32Be(bytes, 0x08U, 0xBBBB0000U);
+    writeU32Be(bytes, 0x0CU, 0x20U);
+
+    writeU32Be(bytes, 0x20U, 1U);
+    writeU16Be(bytes, 0x24U, 3U);
+    writeU16Be(bytes, 0x26U, 0U);
+    writeU32Be(bytes, 0x28U, 0x30000004U);
+    writeU32Be(bytes, 0x2CU, 0x30000008U);
+    writeU32Be(bytes, 0x30U, 0x05060708U);
+    writeU16Be(bytes, 0x34U, 0xFFFFU);
+    writeU16Be(bytes, 0x36U, 0U);
+
+    writeU16Be(bytes, 0x44U, 0U);
+    writeU16Be(bytes, 0x46U, 0x2222U);
+    writeU16Be(bytes, 0x48U, 0x0033U);
+    writeU16Be(bytes, 0x4AU, 0x0044U);
     return bytes;
 }
 
@@ -615,4 +656,96 @@ TEST(SpiceMixDocuments, DocumentOperationsDeliverStructuredEvents) {
     EXPECT_TRUE(std::any_of(events.begin(), events.end(), [](const auto& event) {
         return event.level == spice::mix::EventLevel::Info;
     }));
+}
+
+TEST(SpiceMixDocuments, SstSmlSessionResolvesPairAndProjectsNestedInspection) {
+    TempDirectory temp{};
+    const auto sml = temp.path / "battle.SML";
+    const auto sst = temp.path / "battle.sSt";
+    writeFile(sml, makeSmlPairMember(makeTwoTextureMld()));
+    writeFile(sst, makeSstPairMember());
+
+    std::vector<spice::mix::OperationEvent> events{};
+    const auto opened = spice::mix::SstSmlDocumentSession::open(sst,
+        spice::mix::DocumentContext{ .report = [&events](const auto& event) { events.push_back(event); } });
+    ASSERT_TRUE(opened.result.ok()) << opened.result.message;
+    ASSERT_TRUE(opened.session);
+
+    const auto overview = opened.session->overview();
+    EXPECT_EQ(overview.stem, "battle");
+    EXPECT_EQ(overview.recordCount, 1U);
+    EXPECT_TRUE(overview.recordCountsAgree);
+    EXPECT_EQ(overview.embeddedMldParsedCount, 1U);
+    EXPECT_EQ(overview.embeddedMldFailedCount, 0U);
+    ASSERT_EQ(opened.session->sourcePaths().size(), 2U);
+
+    const auto records = opened.session->records();
+    ASSERT_EQ(records.size(), 1U);
+    EXPECT_TRUE(records.front().embeddedMldParsed);
+    EXPECT_EQ(records.front().embeddedMldEntryCount, 1U);
+    EXPECT_EQ(records.front().embeddedMldTextureCount, 2U);
+    ASSERT_TRUE(opened.session->embeddedMldOverview(0U).has_value());
+    EXPECT_EQ(opened.session->embeddedMldEntries(0U).size(), 1U);
+    ASSERT_EQ(opened.session->embeddedMldTextures(0U).size(), 2U);
+    const auto preview = opened.session->embeddedMldTexturePreview(0U, 0U);
+    ASSERT_TRUE(preview.has_value());
+    EXPECT_EQ(preview->width, 4U);
+    EXPECT_EQ(preview->height, 4U);
+
+    const auto commands = opened.session->commands(0U);
+    ASSERT_EQ(commands.size(), 1U);
+    EXPECT_EQ(commands.front().type, 3);
+    EXPECT_EQ(commands.front().typeLabel, "Texture-coordinate adjustment");
+    ASSERT_TRUE(opened.session->commandDetail(0U, 0U).has_value());
+    EXPECT_FALSE(opened.session->runtimeContext().fields.empty());
+    EXPECT_TRUE(std::any_of(events.begin(), events.end(), [](const auto& event) {
+        return event.level == spice::mix::EventLevel::Progress;
+    }));
+
+    std::size_t regularFileCount = 0U;
+    for (const auto& entry : std::filesystem::directory_iterator(temp.path)) {
+        if (entry.is_regular_file()) ++regularFileCount;
+    }
+    EXPECT_EQ(regularFileCount, 2U);
+}
+
+TEST(SpiceMixDocuments, SstSmlSessionRequiresAnUnambiguousCompanion) {
+    TempDirectory temp{};
+    const auto sml = temp.path / "orphan.sml";
+    writeFile(sml, makeSmlPairMember(makeTwoTextureMld()));
+
+    const auto opened = spice::mix::SstSmlDocumentSession::open(sml);
+    EXPECT_FALSE(opened.session);
+    EXPECT_EQ(opened.result.status, spice::mix::OperationStatus::Failure);
+    EXPECT_NE(opened.result.message.find("companion is missing"), std::string::npos);
+    EXPECT_EQ(std::distance(std::filesystem::directory_iterator(temp.path),
+        std::filesystem::directory_iterator{}), 1);
+}
+
+TEST(SpiceMixDocuments, SstSmlSessionKeepsEmbeddedMldFailureNonFatal) {
+    TempDirectory temp{};
+    const auto sml = temp.path / "partial.sml";
+    const auto sst = temp.path / "partial.sst";
+    const std::vector<std::uint8_t> invalidMld{ 0xDEU, 0xADU, 0xBEU, 0xEFU };
+    writeFile(sml, makeSmlPairMember(invalidMld));
+    writeFile(sst, makeSstPairMember());
+
+    const auto opened = spice::mix::SstSmlDocumentSession::open(sml);
+    ASSERT_TRUE(opened.result.ok()) << opened.result.message;
+    ASSERT_TRUE(opened.session);
+    const auto records = opened.session->records();
+    ASSERT_EQ(records.size(), 1U);
+    EXPECT_FALSE(records.front().embeddedMldParsed);
+    EXPECT_EQ(records.front().embeddedMldParseStatus, "Failed");
+    EXPECT_EQ(opened.session->overview().embeddedMldFailedCount, 1U);
+    EXPECT_FALSE(opened.session->diagnostics().empty());
+}
+
+TEST(SpiceMixDocuments, SstSmlSessionHonorsCancellationBeforeReading) {
+    std::stop_source stop{};
+    stop.request_stop();
+    const auto opened = spice::mix::SstSmlDocumentSession::open("missing.sml",
+        spice::mix::DocumentContext{ .stopToken = stop.get_token() });
+    EXPECT_FALSE(opened.session);
+    EXPECT_EQ(opened.result.status, spice::mix::OperationStatus::Cancelled);
 }

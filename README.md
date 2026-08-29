@@ -9,7 +9,7 @@ SPICE is the Skies Package Interchange and Content Encoder, a Windows C++20 tool
 - Dedicated libraries for supported Dreamcast and GameCube file formats.
 - Platform-neutral editable models where safe rewriting is supported.
 - `SpiceGrinder`, a command-line interface for conversion and export workflows.
-- `SpiceRack`, a Qt desktop application for MLD inspection and GVR/PVR texture editing.
+- `SpiceRack`, a Qt desktop application for MLD and paired SST/SML inspection plus GVR/PVR texture editing.
 - PNG, JSON, Blender IR, and selected ALX CSV interchange workflows.
 
 
@@ -47,7 +47,7 @@ Launch the desktop application with:
 .\bin\x64\Debug\SpiceRack.exe
 ```
 
-SpiceRack currently opens MLD, GVR, and PVR documents and can create GVR or PVR textures from PNG images.
+SpiceRack currently opens MLD, paired SST/SML, GVR, and PVR documents and can create GVR or PVR textures from PNG images. Opening either member of an SST/SML pair requires its same-directory, same-stem companion and presents the pair as one read-only battle-stage document.
 
 
 
@@ -77,7 +77,7 @@ Support varies by format. Some formats have semantic editors and writers, while 
 | Project         | Purpose                                                                                                |
 | --------------- | ------------------------------------------------------------------------------------------------------ |
 | `SpiceGrinder`  | Command-line interface for conversions, exports, and research operations.                              |
-| `SpiceRack`     | Qt desktop interface for inspecting MLD documents and editing standalone or embedded GVR/PVR textures. |
+| `SpiceRack`     | Qt desktop interface for inspecting MLD and paired SST/SML documents and editing standalone or embedded GVR/PVR textures. |
 | `SpiceMix`      | Frontend-neutral operation and editable-document layer shared by SpiceGrinder and SpiceRack.           |
 | `SpiceRoot`     | Common endian, alignment, FourCC, and binary I/O primitives.                                           |
 | `Sa3Dport`      | C++ port of the SA3D model and animation functionality used by SPICE.                                  |
