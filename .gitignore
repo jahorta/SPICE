@@ -24,6 +24,7 @@ SpiceSCT/validations/
 AGENTS.md
 SpiceTests/fixtures/**/*.mld
 SpiceTrade/Alx v5.0.0 corpuses/
+planning/
 
 # Parser generated outputs
 SpiceGrinder/blender_ir/
@@ -33,6 +34,7 @@ SpiceGrinder/decompressed_inputs/
 SpiceGrinder/inputs/
 SpiceSCT/full_spice_out/
 SpiceBin/research/
+SpiceBin/scripts/
 SpiceEct/research/
 SpiceMll/research/
 SpiceMLD/research/
@@ -44,15 +46,10 @@ SpiceMlk/research/
 SpiceStd/research/
 /research/
 SpiceMlk/annotations/
-planning/Analysis/*
-!planning/Analysis/2026-06-16_bin_ghidra_handler_trace/
-!planning/Analysis/2026-06-16_bin_ghidra_handler_trace/summary.md
-!planning/Analysis/2026-06-20_field_x_menu_bin_annotation/
-!planning/Analysis/2026-06-20_field_x_menu_bin_annotation/20260620_field_x_menu_bin_annotation_guide.txt
-!planning/Analysis/2026-08-26_pvm_pvr_support/
-!planning/Analysis/2026-08-26_pvm_pvr_support/summary.md
-planning/Analysis/**/*.csv
-planning/Analysis/**/*.json
+Sa3Dport/SA3D_CSharp_to_Cpp_Port_Implementation_Plan.md
+SpiceSCT/SALSA_default_instructions_reference.md
+tools/disc_inventory/
+
 
 # Python/cache artifacts
 __pycache__/
