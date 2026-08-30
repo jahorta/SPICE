@@ -120,6 +120,47 @@ std::vector<std::uint8_t> makeTwoTextureMld() {
     return bytes;
 }
 
+void addDetailedEntryLists(std::vector<std::uint8_t>& bytes, const bool littleEndian) {
+    const auto write = [littleEndian, &bytes](const std::size_t offset, const std::uint32_t value) {
+        if (littleEndian) writeU32Le(bytes, offset, value);
+        else writeU32Be(bytes, offset, value);
+    };
+    constexpr std::uint32_t groundLinks = 0x200U;
+    constexpr std::uint32_t paramList2 = 0x220U;
+    constexpr std::uint32_t functionParameters = 0x240U;
+    constexpr std::uint32_t objectAddresses = 0x260U;
+    constexpr std::uint32_t groundAddresses = 0x280U;
+    constexpr std::uint32_t motionAddresses = 0x2A0U;
+    constexpr std::uint32_t textureNames = 0x2C0U;
+    write(0x28U, groundLinks);
+    write(0x2CU, paramList2);
+    write(0x30U, functionParameters);
+    write(0x34U, objectAddresses);
+    write(0x38U, groundAddresses);
+    write(0x3CU, motionAddresses);
+    write(0x40U, textureNames);
+
+    const auto writeList = [&write](const std::uint32_t pointer,
+        const std::initializer_list<std::uint32_t> values) {
+        write(pointer, static_cast<std::uint32_t>(values.size()));
+        std::size_t index = 0U;
+        for (const auto value : values) write(pointer + 4U + index++ * 4U, value);
+    };
+    writeList(groundLinks, { 0U, 7U });
+    writeList(paramList2, { 8U, 9U });
+    writeList(functionParameters, { 10U, 0U, 12U });
+    writeList(objectAddresses, { 0U, 0x180U });
+    writeList(groundAddresses, { 0x180U, 0U });
+    writeList(motionAddresses, { 0U, 0x180U, 0U });
+
+    write(textureNames + 4U, 2U);
+    write(textureNames + 8U, 0x300U);
+    write(textureNames + 20U, 0x310U);
+    const std::string names[] = { "detail_first", "detail_second" };
+    std::copy(names[0].begin(), names[0].end(), bytes.begin() + 0x300U);
+    std::copy(names[1].begin(), names[1].end(), bytes.begin() + 0x310U);
+}
+
 std::vector<std::uint8_t> makeSmlPairMember(const std::span<const std::uint8_t> embeddedMld) {
     std::vector<std::uint8_t> bytes(0x20U + embeddedMld.size(), 0U);
     writeU32Be(bytes, 0x00U, 0x534D4C30U);
@@ -686,6 +727,7 @@ TEST(SpiceMixDocuments, SstSmlSessionResolvesPairAndProjectsNestedInspection) {
     EXPECT_EQ(records.front().embeddedMldTextureCount, 2U);
     ASSERT_TRUE(opened.session->embeddedMldOverview(0U).has_value());
     EXPECT_EQ(opened.session->embeddedMldEntries(0U).size(), 1U);
+    ASSERT_EQ(opened.session->embeddedMldEntryDetails(0U).size(), 1U);
     ASSERT_EQ(opened.session->embeddedMldTextures(0U).size(), 2U);
     const auto preview = opened.session->embeddedMldTexturePreview(0U, 0U);
     ASSERT_TRUE(preview.has_value());
@@ -707,6 +749,80 @@ TEST(SpiceMixDocuments, SstSmlSessionResolvesPairAndProjectsNestedInspection) {
         if (entry.is_regular_file()) ++regularFileCount;
     }
     EXPECT_EQ(regularFileCount, 2U);
+}
+
+TEST(SpiceMixDocuments, MldEntryDetailsPreservePointersValidityValuesAndTextureNames) {
+    TempDirectory temp{};
+    auto bytes = makeTwoTextureMld();
+    addDetailedEntryLists(bytes, false);
+    const auto source = temp.path / "detailed.mld";
+    writeFile(source, bytes);
+
+    const auto opened = spice::mix::MldDocumentSession::open(source);
+    ASSERT_TRUE(opened.result.ok()) << opened.result.message;
+    ASSERT_TRUE(opened.session);
+    const auto details = opened.session->entryDetails();
+    ASSERT_EQ(details.size(), 1U);
+    const auto& detail = details.front();
+    EXPECT_EQ(detail.summary.entryId, 7U);
+    EXPECT_EQ(detail.groundLinks.pointer, 0x200U);
+    EXPECT_TRUE(detail.groundLinks.valid);
+    EXPECT_EQ(detail.groundLinks.values, (std::vector<std::uint32_t>{ 0U, 7U }));
+    EXPECT_EQ(detail.paramList2.pointer, 0x220U);
+    EXPECT_EQ(detail.paramList2.values, (std::vector<std::uint32_t>{ 8U, 9U }));
+    EXPECT_EQ(detail.functionParameters.pointer, 0x240U);
+    EXPECT_EQ(detail.functionParameters.values, (std::vector<std::uint32_t>{ 10U, 0U, 12U }));
+    EXPECT_EQ(detail.objectAddresses.pointer, 0x260U);
+    EXPECT_EQ(detail.objectAddresses.values, (std::vector<std::uint32_t>{ 0U, 0x180U }));
+    EXPECT_EQ(detail.groundAddresses.pointer, 0x280U);
+    EXPECT_EQ(detail.groundAddresses.values, (std::vector<std::uint32_t>{ 0x180U, 0U }));
+    EXPECT_EQ(detail.motionAddresses.pointer, 0x2A0U);
+    EXPECT_EQ(detail.motionAddresses.values, (std::vector<std::uint32_t>{ 0U, 0x180U, 0U }));
+    EXPECT_EQ(detail.textureNames.pointer, 0x2C0U);
+    EXPECT_TRUE(detail.textureNames.valid);
+    EXPECT_EQ(detail.textureNames.values,
+        (std::vector<std::string>{ "detail_first", "detail_second" }));
+    EXPECT_FALSE(opened.session->dirty());
+
+    writeU32Be(bytes, 0x28U, 0xFFFFFFF0U);
+    const auto malformed = temp.path / "invalid-list.mld";
+    writeFile(malformed, bytes);
+    const auto malformedOpen = spice::mix::MldDocumentSession::open(malformed);
+    ASSERT_TRUE(malformedOpen.result.ok()) << malformedOpen.result.message;
+    const auto malformedDetails = malformedOpen.session->entryDetails();
+    ASSERT_EQ(malformedDetails.size(), 1U);
+    EXPECT_EQ(malformedDetails.front().groundLinks.pointer, 0xFFFFFFF0U);
+    EXPECT_FALSE(malformedDetails.front().groundLinks.valid);
+    EXPECT_TRUE(malformedDetails.front().groundLinks.values.empty());
+}
+
+TEST(SpiceMixDocuments, MldEntryDetailsRetainEquivalentListsAcrossPlatforms) {
+    TempDirectory temp{};
+    auto gameCubeBytes = makeTwoTextureMld();
+    addDetailedEntryLists(gameCubeBytes, false);
+    auto dreamcastBytes = makeDreamcastTextureMld({ encodePvr(4U, 71U, 25U) });
+    addDetailedEntryLists(dreamcastBytes, true);
+    const auto gameCubePath = temp.path / "details-gc.mld";
+    const auto dreamcastPath = temp.path / "details-dc.mld";
+    writeFile(gameCubePath, gameCubeBytes);
+    writeFile(dreamcastPath, dreamcastBytes);
+
+    const auto gameCube = spice::mix::MldDocumentSession::open(gameCubePath);
+    const auto dreamcast = spice::mix::MldDocumentSession::open(dreamcastPath);
+    ASSERT_TRUE(gameCube.result.ok()) << gameCube.result.message;
+    ASSERT_TRUE(dreamcast.result.ok()) << dreamcast.result.message;
+    const auto gameCubeDetails = gameCube.session->entryDetails();
+    const auto dreamcastDetails = dreamcast.session->entryDetails();
+    ASSERT_EQ(gameCubeDetails.size(), 1U);
+    ASSERT_EQ(dreamcastDetails.size(), 1U);
+    EXPECT_EQ(gameCubeDetails.front().groundLinks.pointer, dreamcastDetails.front().groundLinks.pointer);
+    EXPECT_EQ(gameCubeDetails.front().groundLinks.values, dreamcastDetails.front().groundLinks.values);
+    EXPECT_EQ(gameCubeDetails.front().paramList2.values, dreamcastDetails.front().paramList2.values);
+    EXPECT_EQ(gameCubeDetails.front().functionParameters.values, dreamcastDetails.front().functionParameters.values);
+    EXPECT_EQ(gameCubeDetails.front().objectAddresses.values, dreamcastDetails.front().objectAddresses.values);
+    EXPECT_EQ(gameCubeDetails.front().groundAddresses.values, dreamcastDetails.front().groundAddresses.values);
+    EXPECT_EQ(gameCubeDetails.front().motionAddresses.values, dreamcastDetails.front().motionAddresses.values);
+    EXPECT_EQ(gameCubeDetails.front().textureNames.values, dreamcastDetails.front().textureNames.values);
 }
 
 TEST(SpiceMixDocuments, SstSmlSessionRequiresAnUnambiguousCompanion) {

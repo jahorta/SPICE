@@ -2,8 +2,6 @@
 
 SPICE is the Skies Package Interchange and Content Encoder, a Windows C++20 toolkit for inspecting, converting, and editing assets from *Skies of Arcadia* and *Skies of Arcadia Legends*.
 
-
-
 ## Features
 
 - Dedicated libraries for supported Dreamcast and GameCube file formats.
@@ -11,8 +9,6 @@ SPICE is the Skies Package Interchange and Content Encoder, a Windows C++20 tool
 - `SpiceGrinder`, a command-line interface for conversion and export workflows.
 - `SpiceRack`, a Qt desktop application for MLD and paired SST/SML inspection plus GVR/PVR texture editing.
 - PNG, JSON, Blender IR, and selected ALX CSV interchange workflows.
-
-
 
 ## Building
 
@@ -31,8 +27,6 @@ git submodule update --init --recursive
 & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" SPICE.sln /p:Configuration=Debug /p:Platform=x64
 ```
 
-
-
 ## Usage
 
 Use the command-line help for the current command list and command-specific options:
@@ -49,7 +43,9 @@ Launch the desktop application with:
 
 SpiceRack currently opens MLD, paired SST/SML, GVR, and PVR documents and can create GVR or PVR textures from PNG images. Opening either member of an SST/SML pair requires its same-directory, same-stem companion and presents the pair as one read-only battle-stage document.
 
+## Blender importing
 
+SpiceRack is able to export the contents of MLD files for import into Blender using a Blender IR .json format. To use this, load the blender importer script at `SpiceMLD\blender\spice_blender_ir_importer.py` as an addon in blender (Using `Edit -> Preferences -> Add-ons`). You can then use `File -> Import -> Spice Blender IR (.json)` to import Blender IR files. This is still under active development, so it is not yet fully accurate.
 
 ## Supported formats
 
@@ -70,29 +66,23 @@ Support varies by format. Some formats have semantic editors and writers, while 
 | `.std`           | `SpiceStd`    | Parses battle action and entry tables, exports JSON, and rewrites promoted semantic fields.                                        |
 | ALX 5.0.0 `.csv` | `SpiceTrade`  | Provides typed interchange for `enemy.csv`, `enemyencounter.csv`, and `enemyevent.csv` only.                                       |
 
-
-
 ## Applications and supporting projects
 
-| Project         | Purpose                                                                                                |
-| --------------- | ------------------------------------------------------------------------------------------------------ |
-| `SpiceGrinder`  | Command-line interface for conversions, exports, and research operations.                              |
+| Project         | Purpose                                                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `SpiceGrinder`  | Command-line interface for conversions, exports, and research operations.                                                 |
 | `SpiceRack`     | Qt desktop interface for inspecting MLD and paired SST/SML documents and editing standalone or embedded GVR/PVR textures. |
-| `SpiceMix`      | Frontend-neutral operation and editable-document layer shared by SpiceGrinder and SpiceRack.           |
-| `SpiceRoot`     | Common endian, alignment, FourCC, and binary I/O primitives.                                           |
-| `Sa3Dport`      | C++ port of the SA3D model and animation functionality used by SPICE.                                  |
-| `SpiceTests`    | Central GoogleTest-based automated test suite.                                                         |
-| `SA3DRefRunner` | .NET reference bridge used to compare SPICE behavior with SA3D.Modeling.                               |
-
-
+| `SpiceMix`      | Frontend-neutral operation and editable-document layer shared by SpiceGrinder and SpiceRack.                              |
+| `SpiceRoot`     | Common endian, alignment, FourCC, and binary I/O primitives.                                                              |
+| `Sa3Dport`      | C++ port of the SA3D model and animation functionality used by SPICE.                                                     |
+| `SpiceTests`    | Central GoogleTest-based automated test suite.                                                                            |
+| `SA3DRefRunner` | .NET reference bridge used to compare SPICE behavior with SA3D.Modeling.                                                  |
 
 ## Documentation
 
 - [`Docs/`](Docs/) contains format layouts, implementation status, and known gaps.
 - [`SpiceMLD/blender/`](SpiceMLD/blender/) contains the Blender IR importer and its usage notes.
 - [`SpiceTrade/README.md`](SpiceTrade/README.md) documents the intentionally narrow ALX CSV compatibility surface.
-
-
 
 ## Acknowledgements
 
@@ -104,8 +94,6 @@ SPICE incorporates or builds on work from:
 - LodePNG, used for PNG encoding and decoding.
 
 Third-party components remain subject to their respective licenses and notices.
-
-
 
 ## License and game data
 
