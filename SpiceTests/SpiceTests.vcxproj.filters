@@ -6,6 +6,7 @@
     <ClCompile Include="test_aklz.cpp" />
     <ClCompile Include="test_content_graph.cpp" />
     <ClCompile Include="test_ect_parser.cpp" />
+    <ClCompile Include="test_endian_migration.cpp" />
     <ClCompile Include="test_gvr_image_ir.cpp" />
     <ClCompile Include="test_mld_gvr_format_inventory.cpp" />
     <ClCompile Include="test_mld_canonical.cpp" />

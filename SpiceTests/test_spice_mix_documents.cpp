@@ -716,6 +716,9 @@ TEST(SpiceMixDocuments, SstSmlSessionResolvesPairAndProjectsNestedInspection) {
     EXPECT_EQ(overview.stem, "battle");
     EXPECT_EQ(overview.recordCount, 1U);
     EXPECT_TRUE(overview.recordCountsAgree);
+    EXPECT_EQ(overview.smlEndian, "Big endian");
+    EXPECT_EQ(overview.sstEndian, "Big endian");
+    EXPECT_EQ(overview.platformContext, "GameCube");
     EXPECT_EQ(overview.embeddedMldParsedCount, 1U);
     EXPECT_EQ(overview.embeddedMldFailedCount, 0U);
     ASSERT_EQ(opened.session->sourcePaths().size(), 2U);

@@ -35,6 +35,12 @@ Use the command-line help for the current command list and command-specific opti
 .\bin\x64\Debug\SpiceGrinder.exe --help
 ```
 
+The cross-platform research audit accepts explicit Dreamcast and GameCube corpus roots and writes only manifests and semantic comparison reports:
+
+```powershell
+.\bin\x64\Debug\SpiceGrinder.exe audit-dreamcast-parity --dreamcast-us <dir> --gamecube-us <dir> --output <dir>
+```
+
 Launch the desktop application with:
 
 ```powershell
@@ -54,16 +60,16 @@ Support varies by format. Some formats have semantic editors and writers, while 
 | Format           | Project       | Current support                                                                                                                    |
 | ---------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | AKLZ             | `Compression` | Compresses and decompresses the wrapper used by many GameCube assets.                                                              |
-| `.bin`           | `SpiceBin`    | Provides read-only probing for known indexed UI/layout families; `.bin` is not treated as one universal format.                    |
+| `.bin`           | `SpiceBin`    | Provides endian-aware read-only probing for known indexed HRS/UI families; `.bin` is not treated as one universal format.          |
 | `.ect`           | `SpiceEct`    | Parses, edits, and writes Dreamcast and GameCube encounter tables through a platform-neutral model.                                |
 | `.gvm` / `.gvr`  | `SpiceGvm`    | Parses GVM archives and decodes, creates, or edits GVR textures with PNG interchange.                                              |
 | `.mld`           | `SpiceMLD`    | Parses GameCube and Dreamcast scene/model containers, exports inspection data, and writes supported geometry and texture surfaces. |
-| `.mlk`           | `SpiceMlk`    | Provides read-only battle-resource inspection, corpus reports, and embedded-MLD Blender IR exports; repacking is not supported.    |
-| `.mll`           | `SpiceMll`    | Parses member archives and supports conservative rebuilding and member replacement.                                                |
+| `.mlk`           | `SpiceMlk`    | Provides endian-aware read-only battle-resource inspection, corpus reports, and embedded-MLD Blender IR exports.                   |
+| `.mll`           | `SpiceMll`    | Parses big- and little-endian member archives and conservatively rebuilds them in their source endian.                             |
 | `.pvm` / `.pvr`  | `SpicePvm`    | Parses, decodes, and encodes Dreamcast texture archives and textures.                                                              |
 | `.sct`           | `SpiceSCT`    | Parses scripts and canonically rebuilds known structures; opcode semantics remain incomplete.                                      |
-| `.sml` / `.sst`  | `SpiceSstSml` | Provides read-only parsing and research exports for paired battle-stage files.                                                     |
-| `.std`           | `SpiceStd`    | Parses battle action and entry tables, exports JSON, and rewrites promoted semantic fields.                                        |
+| `.sml` / `.sst`  | `SpiceSstSml` | Provides endian-aware read-only parsing and research exports for paired GameCube and Dreamcast battle-stage files.                 |
+| `.std`           | `SpiceStd`    | Parses big- and little-endian battle action and entry tables and rewrites fields in the source endian.                            |
 | ALX 5.0.0 `.csv` | `SpiceTrade`  | Provides typed interchange for `enemy.csv`, `enemyencounter.csv`, and `enemyevent.csv` only.                                       |
 
 ## Applications and supporting projects

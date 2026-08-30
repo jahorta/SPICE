@@ -80,6 +80,8 @@ TEST(SpiceMlkParser, BuildsSupportedFileForNormalTableShape) {
     EXPECT_EQ(parsed.runtimeRecordCount, 2);
     EXPECT_EQ(parsed.rawRecordCountCandidate, 2U);
     EXPECT_EQ(parsed.selectedRecordCount, 2U);
+    EXPECT_EQ(parsed.descriptorRecordCount, 2U);
+    EXPECT_EQ(parsed.unavailableTrailingRecordCount, 0U);
     EXPECT_EQ(parsed.recordCountSource, spice::mlk::MlkRecordCountSource::HeaderU16At04);
     EXPECT_EQ(parsed.records.size(), 2U);
     EXPECT_EQ(parsed.records[0].payloadKind, spice::mlk::MlkPayloadKind::NinjaChunk);
@@ -118,24 +120,27 @@ TEST(SpiceMlkParserRealFiles, UsBeffAnomalyShapesStayStable) {
 
     struct ExpectedShape {
         const char* relativePath;
-        spice::mlk::MlkTableShape tableShape;
         std::uint16_t inferredCount;
         std::uint16_t selectedCount;
+        std::uint16_t descriptorCount;
+        std::uint16_t unavailableCount;
     };
     const ExpectedShape expected[] = {
-        { "beff/d2403900.mlk", spice::mlk::MlkTableShape::FirstPayloadCountCandidate, 82U, 20992U },
-        { "beff/d2900200.mlk", spice::mlk::MlkTableShape::MalformedRecordSpans, 28U, 28U },
-        { "beff/f2705733.mlk", spice::mlk::MlkTableShape::MalformedRecordSpans, 10U, 10U },
-        { "beff/f2900200.mlk", spice::mlk::MlkTableShape::MalformedRecordSpans, 28U, 28U },
-        { "beff/f290986b.mlk", spice::mlk::MlkTableShape::MalformedRecordSpans, 10U, 10U },
+        { "beff/d2403900.mlk", 82U, 24U, 82U, 58U },
+        { "beff/d2900200.mlk", 28U, 14U, 28U, 14U },
+        { "beff/f2705733.mlk", 10U, 5U, 10U, 5U },
+        { "beff/f2900200.mlk", 28U, 14U, 28U, 14U },
+        { "beff/f290986b.mlk", 10U, 5U, 10U, 5U },
     };
 
     for (const auto& item : expected) {
         const auto parsed = spice::mlk::MlkParser::parseFile(root / item.relativePath);
-        EXPECT_FALSE(parsed.supported) << item.relativePath;
-        EXPECT_EQ(parsed.tableShape, item.tableShape) << item.relativePath;
+        EXPECT_TRUE(parsed.supported) << item.relativePath;
+        EXPECT_EQ(parsed.tableShape, spice::mlk::MlkTableShape::TrailingUnavailablePayloads) << item.relativePath;
         EXPECT_EQ(parsed.recordCountInferredFromFirstPayloadOffset, item.inferredCount) << item.relativePath;
         EXPECT_EQ(parsed.selectedRecordCount, item.selectedCount) << item.relativePath;
-        EXPECT_GT(parsed.records.size(), 0U) << item.relativePath;
+        EXPECT_EQ(parsed.descriptorRecordCount, item.descriptorCount) << item.relativePath;
+        EXPECT_EQ(parsed.unavailableTrailingRecordCount, item.unavailableCount) << item.relativePath;
+        EXPECT_EQ(parsed.records.size(), item.selectedCount) << item.relativePath;
     }
 }
