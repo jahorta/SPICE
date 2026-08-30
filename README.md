@@ -101,8 +101,4 @@ SPICE incorporates or builds on work from:
 
 Third-party components remain subject to their respective licenses and notices.
 
-## License and game data
-
-SPICE does not currently declare a top-level project license. The repository contains tooling only and does not include game data, extracted assets, or reference corpora.
-
 SPICE is an independent fan and research project and is not affiliated with or endorsed by the rights holders of *Skies of Arcadia*.
