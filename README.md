@@ -77,7 +77,7 @@ Support varies by format. Some formats have semantic editors and writers, while 
 | Project         | Purpose                                                                                                                   |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `SpiceGrinder`  | Command-line interface for conversions, exports, and research operations.                                                 |
-| `SpiceRack`     | Qt desktop interface for inspecting MLD and paired SST/SML documents and editing standalone or embedded GVR/PVR textures. |
+| `SpiceRack`     | Qt desktop interface for inspecting ECT, MLD, and paired SST/SML documents and editing standalone or embedded GVR/PVR textures. |
 | `SpiceMix`      | Frontend-neutral operation and editable-document layer shared by SpiceGrinder and SpiceRack.                              |
 | `SpiceRoot`     | Common endian, alignment, FourCC, and binary I/O primitives.                                                              |
 | `Sa3Dport`      | C++ port of the SA3D model and animation functionality used by SPICE.                                                     |

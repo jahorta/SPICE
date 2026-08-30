@@ -1,4 +1,5 @@
 #include "../SpiceMix/Documents/GvrDocumentSession.h"
+#include "../SpiceMix/Documents/EctDocumentSession.h"
 #include "../SpiceMix/Documents/MldDocumentSession.h"
 #include "../SpiceMix/Documents/PvrDocumentSession.h"
 #include "../SpiceMix/Documents/SstSmlDocumentSession.h"
@@ -6,6 +7,7 @@
 #include "../SpiceGvm/Image/PngCodec.h"
 #include "../SpicePvm/Encoding/PvrEncoder.h"
 #include "../SpicePvm/Parsing/PvmParser.h"
+#include "../SpiceEct/EctFileWriter.h"
 
 #include <gtest/gtest.h>
 
@@ -77,6 +79,20 @@ spice::gvm::model::RgbaImage image(const std::uint32_t width, const std::uint32_
         out.rgba8[offset + 3U] = 255U;
     }
     return out;
+}
+
+spice::ect::EctEncounterTable ectTable(
+    const std::uint16_t stage,
+    const std::uint16_t overallRate,
+    const std::uint16_t encounterId,
+    const std::uint16_t encounterRate) {
+    spice::ect::EctEncounterTable table{};
+    table.stage = stage;
+    table.overallEncounterRate = overallRate;
+    table.encounters[0] = { encounterId, encounterRate };
+    table.encounters[2] = { static_cast<std::uint16_t>(encounterId + 1U),
+        static_cast<std::uint16_t>(encounterRate + 3U) };
+    return table;
 }
 
 std::vector<std::uint8_t> makeTwoTextureMld() {
@@ -697,6 +713,117 @@ TEST(SpiceMixDocuments, DocumentOperationsDeliverStructuredEvents) {
     EXPECT_TRUE(std::any_of(events.begin(), events.end(), [](const auto& event) {
         return event.level == spice::mix::EventLevel::Info;
     }));
+}
+
+TEST(SpiceMixDocuments, EctSessionProjectsFlatTablesAndAllOrderedSlots) {
+    TempDirectory temp{};
+    spice::ect::EctFlatContent content{};
+    content.tables.push_back(ectTable(0x12U, 0x30U, 0x17U, 0x10U));
+    content.tables.push_back(ectTable(0x22U, 0x40U, 0x27U, 0x20U));
+    const spice::ect::EctFile file{ spice::ect::EctContent{ content } };
+    const auto written = spice::ect::EctFileWriter{}.write(
+        file, spice::ect::EctTargetPlatform::Dreamcast);
+    ASSERT_TRUE(written.ok());
+    const auto path = temp.path / "sample.ECT";
+    writeFile(path, written.bytes);
+
+    std::vector<spice::mix::OperationEvent> events{};
+    const auto opened = spice::mix::EctDocumentSession::open(path,
+        spice::mix::DocumentContext{ .report = [&events](const auto& event) { events.push_back(event); } });
+    ASSERT_TRUE(opened.result.ok()) << opened.result.message;
+    ASSERT_TRUE(opened.session);
+
+    const auto overview = opened.session->overview();
+    EXPECT_EQ(overview.sourcePath, path);
+    EXPECT_EQ(overview.layout, "Flat encounter tables");
+    EXPECT_EQ(overview.platform, "Dreamcast");
+    EXPECT_EQ(overview.endian, "Little endian");
+    EXPECT_FALSE(overview.sourceWasAklz);
+    EXPECT_EQ(overview.sourceSize, 2U * 0x84U);
+    EXPECT_EQ(overview.decodedSize, overview.sourceSize);
+    EXPECT_EQ(overview.containerEntryCount, 0U);
+    EXPECT_EQ(overview.tableCount, 2U);
+    EXPECT_EQ(overview.encounterSlotCount, 64U);
+    EXPECT_EQ(overview.nonzeroEncounterSlotCount, 4U);
+    EXPECT_TRUE(opened.session->containerEntries().empty());
+    ASSERT_EQ(opened.session->tables().size(), 2U);
+    ASSERT_TRUE(opened.session->table(0U).has_value());
+    const auto table = *opened.session->table(0U);
+    EXPECT_EQ(table.summary.stage, 0x12U);
+    EXPECT_EQ(table.summary.overallEncounterRate, 0x30U);
+    EXPECT_EQ(table.summary.nonzeroEncounterSlotCount, 2U);
+    EXPECT_EQ(table.summary.encounterRateSum, 0x23U);
+    ASSERT_EQ(table.encounters.size(), 32U);
+    EXPECT_EQ(table.encounters[0].encounterId, 0x17U);
+    EXPECT_EQ(table.encounters[1].encounterId, 0U);
+    EXPECT_FALSE(table.encounters[1].nonzero);
+    EXPECT_EQ(table.encounters[2].encounterId, 0x18U);
+    EXPECT_EQ(opened.session->sourcePaths(), (std::vector<std::filesystem::path>{ path }));
+    EXPECT_TRUE(std::any_of(events.begin(), events.end(), [](const auto& event) {
+        return event.level == spice::mix::EventLevel::Progress;
+    }));
+    EXPECT_TRUE(std::any_of(events.begin(), events.end(), [](const auto& event) {
+        return event.level == spice::mix::EventLevel::Info;
+    }));
+}
+
+TEST(SpiceMixDocuments, EctSessionProjectsA099HierarchyAndGameCubeEnvelope) {
+    TempDirectory temp{};
+    spice::ect::EctOverworldEntry entry{};
+    entry.title = "dam_test";
+    for (std::size_t index = 0; index < entry.tables.size(); ++index) {
+        entry.tables[index] = ectTable(static_cast<std::uint16_t>(0x30U + index),
+            static_cast<std::uint16_t>(0x40U + index),
+            static_cast<std::uint16_t>(0x50U + index), 5U);
+    }
+    spice::ect::EctOverworldContent indexed{};
+    indexed.entries.push_back(entry);
+    const spice::ect::EctFile indexedFile{ spice::ect::EctContent{ indexed } };
+    const auto indexedBytes = spice::ect::EctFileWriter{}.write(
+        indexedFile, spice::ect::EctTargetPlatform::Dreamcast);
+    ASSERT_TRUE(indexedBytes.ok());
+    const auto indexedPath = temp.path / "a099a.ect";
+    writeFile(indexedPath, indexedBytes.bytes);
+
+    const auto openedIndexed = spice::mix::EctDocumentSession::open(indexedPath);
+    ASSERT_TRUE(openedIndexed.result.ok()) << openedIndexed.result.message;
+    ASSERT_TRUE(openedIndexed.session);
+    const auto overview = openedIndexed.session->overview();
+    EXPECT_EQ(overview.layout, "A099 indexed overworld");
+    EXPECT_EQ(overview.containerEntryCount, 1U);
+    EXPECT_EQ(overview.tableCount, 8U);
+    const auto entries = openedIndexed.session->containerEntries();
+    ASSERT_EQ(entries.size(), 1U);
+    EXPECT_EQ(entries[0].title, "dam_test");
+    EXPECT_EQ(entries[0].tableIndexes,
+        (std::vector<std::size_t>{ 0U, 1U, 2U, 3U, 4U, 5U, 6U, 7U }));
+    ASSERT_TRUE(openedIndexed.session->table(7U).has_value());
+    EXPECT_EQ(openedIndexed.session->table(7U)->summary.tableIndexWithinEntry, 7U);
+    EXPECT_EQ(openedIndexed.session->table(7U)->summary.containerTitle, "dam_test");
+
+    spice::ect::EctFlatContent flat{};
+    flat.tables.push_back(ectTable(1U, 2U, 3U, 4U));
+    const spice::ect::EctFile flatFile{ spice::ect::EctContent{ flat } };
+    const auto gameCubeBytes = spice::ect::EctFileWriter{}.write(
+        flatFile, spice::ect::EctTargetPlatform::GameCube);
+    ASSERT_TRUE(gameCubeBytes.ok());
+    const auto gameCubePath = temp.path / "gamecube.ect";
+    writeFile(gameCubePath, gameCubeBytes.bytes);
+    const auto openedGameCube = spice::mix::EctDocumentSession::open(gameCubePath);
+    ASSERT_TRUE(openedGameCube.result.ok()) << openedGameCube.result.message;
+    EXPECT_EQ(openedGameCube.session->overview().platform, "GameCube");
+    EXPECT_EQ(openedGameCube.session->overview().endian, "Big endian");
+    EXPECT_TRUE(openedGameCube.session->overview().sourceWasAklz);
+    EXPECT_EQ(openedGameCube.session->overview().decodedSize, 0x84U);
+}
+
+TEST(SpiceMixDocuments, EctSessionHonorsCancellationBeforeReading) {
+    std::stop_source stop{};
+    stop.request_stop();
+    const auto opened = spice::mix::EctDocumentSession::open("missing.ect",
+        spice::mix::DocumentContext{ .stopToken = stop.get_token() });
+    EXPECT_FALSE(opened.session);
+    EXPECT_EQ(opened.result.status, spice::mix::OperationStatus::Cancelled);
 }
 
 TEST(SpiceMixDocuments, SstSmlSessionResolvesPairAndProjectsNestedInspection) {
