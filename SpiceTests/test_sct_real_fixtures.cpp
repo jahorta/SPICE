@@ -205,9 +205,9 @@ TEST(SctRealFixtures, Me017bImportsDeterministicCanonicalDocumentWithCompleteCov
         [&](const auto& attachment) {
             return attachment.fixedOffset == 0 && attachment.bytes.size() == parsed.file.originalPayloadBytes.size();
         }));
-    const auto validation = spice::sct::SctDocumentValidator::validate(
-        *first.document, {spice::sct::SctPlatform::GameCube}, &first.receipt);
-    EXPECT_TRUE(validation.validForLayout);
+    const auto validation = spice::sct::SctDocumentValidator::validateForTarget(
+        *first.document, spice::sct::SctPlatform::GameCube, &first.receipt);
+    EXPECT_TRUE(validation.validForTarget);
 }
 
 TEST(SctRealFixtures, Me004aCarriesGameCubeOnlyOpcode265)
@@ -232,12 +232,14 @@ TEST(SctRealFixtures, Me004aCarriesGameCubeOnlyOpcode265)
     }
     ASSERT_GT(opcode265Count, 0u);
 
-    const auto gameCube = spice::sct::SctDocumentValidator::validate(
-        *imported.document, {spice::sct::SctPlatform::GameCube}, &imported.receipt);
-    const auto dreamcast = spice::sct::SctDocumentValidator::validate(
-        *imported.document, {spice::sct::SctPlatform::Dreamcast}, &imported.receipt);
-    EXPECT_TRUE(gameCube.validForLayout);
-    EXPECT_FALSE(dreamcast.validForLayout);
+    const auto structural = spice::sct::SctDocumentValidator::validateDocument(*imported.document);
+    const auto gameCube = spice::sct::SctDocumentValidator::validateForTarget(
+        *imported.document, spice::sct::SctPlatform::GameCube, &imported.receipt);
+    const auto dreamcast = spice::sct::SctDocumentValidator::validateForTarget(
+        *imported.document, spice::sct::SctPlatform::Dreamcast, &imported.receipt);
+    EXPECT_TRUE(structural.validDocument);
+    EXPECT_TRUE(gameCube.validForTarget);
+    EXPECT_FALSE(dreamcast.validForTarget);
     EXPECT_TRUE(std::any_of(dreamcast.diagnostics.begin(), dreamcast.diagnostics.end(),
         [](const auto& diagnostic) {
             return diagnostic.code == spice::sct::SctDiagnosticCode::OpcodeUnavailable;
