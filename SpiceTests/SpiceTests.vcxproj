@@ -132,6 +132,7 @@
     <ClCompile Include="test_mll_corpus_export.cpp" />
     <ClCompile Include="test_mll_parser.cpp" />
     <ClCompile Include="test_sct_ir.cpp" />
+    <ClCompile Include="test_sct_document.cpp" />
     <ClCompile Include="test_sct_opcode_schema.cpp" />
     <ClCompile Include="test_sct_real_fixtures.cpp" />
     <ClCompile Include="test_sct_roundtrip.cpp" />
