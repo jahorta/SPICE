@@ -18,6 +18,8 @@
     <ClCompile Include="test_mlk_scanner.cpp" />
     <ClCompile Include="test_sct_ir.cpp" />
     <ClCompile Include="test_sct_document.cpp" />
+    <ClCompile Include="test_sct_document_export.cpp" />
+    <ClCompile Include="test_sct_document_header.cpp" />
     <ClCompile Include="test_sct_opcode_schema.cpp" />
     <ClCompile Include="test_sct_real_fixtures.cpp" />
     <ClCompile Include="test_sct_roundtrip.cpp" />
