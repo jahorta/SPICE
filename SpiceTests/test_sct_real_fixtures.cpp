@@ -187,9 +187,9 @@ TEST(SctRealFixtures, Me017bImportsDeterministicCanonicalDocumentWithCompleteCov
     const auto parsed = spice::sct::SctParser{}.parseFile(fixture.string());
     ASSERT_TRUE(parsed.parseOk);
     const auto first = spice::sct::SctDocumentImporter::import(parsed,
-        {{spice::sct::SctPlatform::GameCube}, spice::sct::SctTextProfile::GameCubeEu});
+        {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
     const auto second = spice::sct::SctDocumentImporter::import(parsed,
-        {{spice::sct::SctPlatform::GameCube}, spice::sct::SctTextProfile::GameCubeEu});
+        {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
     ASSERT_TRUE(first.document.has_value());
     ASSERT_TRUE(second.document.has_value());
     EXPECT_EQ(first.document->sections.size(), second.document->sections.size());
@@ -232,7 +232,7 @@ TEST(SctRealFixtures, Me017bImportsDeterministicCanonicalDocumentWithCompleteCov
         }));
     const auto validation = spice::sct::SctDocumentValidator::validateForTarget(
         *first.document, spice::sct::SctPlatform::GameCube,
-        spice::sct::SctTextProfile::GameCubeEu, &first.receipt);
+        spice::sct::kSctWindows1252Byte7FEncoding, &first.receipt);
     EXPECT_TRUE(validation.validForTarget);
 }
 
@@ -246,7 +246,7 @@ TEST(SctRealFixtures, Me004aCarriesGameCubeOnlyOpcode265)
     const auto parsed = spice::sct::SctParser{}.parseFile(fixture.string());
     ASSERT_TRUE(parsed.parseOk);
     const auto imported = spice::sct::SctDocumentImporter::import(parsed,
-        {{spice::sct::SctPlatform::GameCube}, spice::sct::SctTextProfile::GameCubeEu});
+        {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
     ASSERT_TRUE(imported.document.has_value());
 
     const auto [opcode265Count, typedReferenceCount] = opcode265ReferenceCounts(*imported.document);
@@ -256,10 +256,10 @@ TEST(SctRealFixtures, Me004aCarriesGameCubeOnlyOpcode265)
     const auto structural = spice::sct::SctDocumentValidator::validateDocument(*imported.document);
     const auto gameCube = spice::sct::SctDocumentValidator::validateForTarget(
         *imported.document, spice::sct::SctPlatform::GameCube,
-        spice::sct::SctTextProfile::GameCubeEu, &imported.receipt);
+        spice::sct::kSctWindows1252Byte7FEncoding, &imported.receipt);
     const auto dreamcast = spice::sct::SctDocumentValidator::validateForTarget(
         *imported.document, spice::sct::SctPlatform::Dreamcast,
-        spice::sct::SctTextProfile::DreamcastEu, &imported.receipt);
+        spice::sct::kSctWindows1252Byte7FEncoding, &imported.receipt);
     EXPECT_TRUE(structural.validDocument);
     EXPECT_TRUE(gameCube.validForTarget);
     EXPECT_FALSE(dreamcast.validForTarget);
@@ -278,12 +278,12 @@ TEST(SctRealFixtures, Me017bStrictDocumentExportPreservesOpaqueBytesAndReimports
     const auto parsed = spice::sct::SctParser{}.parseFile(fixture.string());
     ASSERT_TRUE(parsed.parseOk);
     const auto imported = spice::sct::SctDocumentImporter::import(parsed,
-        {{spice::sct::SctPlatform::GameCube}, spice::sct::SctTextProfile::GameCubeEu});
+        {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
     ASSERT_TRUE(imported.document.has_value());
 
     const spice::sct::SctDocumentExportOptions options{
         spice::sct::SctPlatform::GameCube,
-        spice::sct::SctTextProfile::GameCubeEu,
+        spice::sct::kSctWindows1252Byte7FEncoding,
         spice::sct::SctDocumentOutputByteOrder::BigEndian,
         spice::sct::SctDocumentOutputWrapper::Aklz,
         spice::sct::SctOpaquePreservationPolicy::RequirePreservation};
@@ -310,7 +310,7 @@ TEST(SctRealFixtures, Me017bStrictDocumentExportPreservesOpaqueBytesAndReimports
     const auto reparsed = spice::sct::SctParser{}.parse(exported.bytes, "me017b.document-export.sct");
     ASSERT_TRUE(reparsed.parseOk);
     const auto reimported = spice::sct::SctDocumentImporter::import(reparsed,
-        {{spice::sct::SctPlatform::GameCube}, spice::sct::SctTextProfile::GameCubeEu});
+        {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
     ASSERT_TRUE(reimported.document.has_value());
     EXPECT_EQ(reimported.document->sections.size(), imported.document->sections.size());
     EXPECT_EQ(documentInstructionCount(*reimported.document), documentInstructionCount(*imported.document));
@@ -327,11 +327,11 @@ TEST(SctRealFixtures, Me004aStrictExportAcceptsGameCubeAndRejectsDreamcast)
     const auto parsed = spice::sct::SctParser{}.parseFile(fixture.string());
     ASSERT_TRUE(parsed.parseOk);
     const auto imported = spice::sct::SctDocumentImporter::import(parsed,
-        {{spice::sct::SctPlatform::GameCube}, spice::sct::SctTextProfile::GameCubeEu});
+        {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
     ASSERT_TRUE(imported.document.has_value());
     spice::sct::SctDocumentExportOptions options{
         spice::sct::SctPlatform::GameCube,
-        spice::sct::SctTextProfile::GameCubeEu,
+        spice::sct::kSctWindows1252Byte7FEncoding,
         spice::sct::SctDocumentOutputByteOrder::BigEndian,
         spice::sct::SctDocumentOutputWrapper::Raw,
         spice::sct::SctOpaquePreservationPolicy::RequirePreservation};
@@ -341,7 +341,7 @@ TEST(SctRealFixtures, Me004aStrictExportAcceptsGameCubeAndRejectsDreamcast)
     const auto reparsed = spice::sct::SctParser{}.parse(gameCube.bytes, "me004a.document-export.sct");
     ASSERT_TRUE(reparsed.parseOk);
     const auto reimported = spice::sct::SctDocumentImporter::import(reparsed,
-        {{spice::sct::SctPlatform::GameCube}, spice::sct::SctTextProfile::GameCubeEu});
+        {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
     ASSERT_TRUE(reimported.document.has_value());
     const auto [original265Count, originalTypedCount] = opcode265ReferenceCounts(*imported.document);
     const auto [reimported265Count, reimportedTypedCount] = opcode265ReferenceCounts(*reimported.document);
@@ -372,7 +372,7 @@ TEST(SctRealFixtures, Me002eAmbiguousIndexedRecordRemainsWhollyOpaque)
     const auto parsed = spice::sct::SctParser{}.parseFile(fixture.string());
     ASSERT_TRUE(parsed.parseOk);
     const auto imported = spice::sct::SctDocumentImporter::import(parsed,
-        {{spice::sct::SctPlatform::GameCube}, spice::sct::SctTextProfile::GameCubeEu});
+        {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
     ASSERT_TRUE(imported.document.has_value());
     const auto section = std::find_if(imported.document->sections.begin(), imported.document->sections.end(),
         [](const auto& candidate) { return candidate.nameBytes == "M99990010"; });
