@@ -18,6 +18,7 @@
     <ClCompile Include="test_mlk_scanner.cpp" />
     <ClCompile Include="test_sct_ir.cpp" />
     <ClCompile Include="test_sct_document.cpp" />
+    <ClCompile Include="test_sct_contract_hardening.cpp" />
     <ClCompile Include="test_sct_document_export.cpp" />
     <ClCompile Include="test_sct_editing_contract.cpp" />
     <ClCompile Include="test_sct_public_workflow.cpp" />

@@ -107,6 +107,14 @@ std::size_t documentInstructionCount(const spice::sct::SctDocument& document)
     return count;
 }
 
+std::size_t documentStringCount(const spice::sct::SctDocument& document)
+{
+    return static_cast<std::size_t>(std::count_if(document.sections.begin(), document.sections.end(),
+        [](const auto& section) {
+            return std::holds_alternative<spice::sct::SctStringSectionContent>(section.content);
+        }));
+}
+
 std::pair<std::size_t, std::size_t> opcode265ReferenceCounts(
     const spice::sct::SctDocument& document)
 {
@@ -193,7 +201,7 @@ TEST(SctRealFixtures, Me017bImportsDeterministicCanonicalDocumentWithCompleteCov
     ASSERT_TRUE(first.document.has_value());
     ASSERT_TRUE(second.document.has_value());
     EXPECT_EQ(first.document->sections.size(), second.document->sections.size());
-    EXPECT_EQ(first.document->strings.size(), second.document->strings.size());
+    EXPECT_EQ(documentStringCount(*first.document), documentStringCount(*second.document));
     EXPECT_EQ(first.document->footerEntries.size(), second.document->footerEntries.size());
     EXPECT_EQ(first.document->opaqueAttachments.size(), second.document->opaqueAttachments.size());
     ASSERT_FALSE(first.document->sections.empty());
@@ -314,7 +322,7 @@ TEST(SctRealFixtures, Me017bStrictDocumentExportPreservesOpaqueBytesAndReimports
     ASSERT_TRUE(reimported.document.has_value());
     EXPECT_EQ(reimported.document->sections.size(), imported.document->sections.size());
     EXPECT_EQ(documentInstructionCount(*reimported.document), documentInstructionCount(*imported.document));
-    EXPECT_EQ(reimported.document->strings.size(), imported.document->strings.size());
+    EXPECT_EQ(documentStringCount(*reimported.document), documentStringCount(*imported.document));
     EXPECT_EQ(reimported.document->footerEntries.size(), imported.document->footerEntries.size());
 }
 
@@ -380,7 +388,7 @@ TEST(SctRealFixtures, Me002eAmbiguousIndexedRecordRemainsWhollyOpaque)
     const auto* content = std::get_if<spice::sct::SctStringSectionContent>(&section->content);
     ASSERT_NE(content, nullptr);
     const auto index = spice::sct::SctDocumentIndex::build(*imported.document);
-    const auto* string = index.find(content->stringId);
+    const auto* string = index.find(content->string.id);
     ASSERT_NE(string, nullptr);
     EXPECT_TRUE(std::holds_alternative<spice::sct::SctOpaqueText>(string->value));
 }
