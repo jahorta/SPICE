@@ -24,6 +24,7 @@
     <ClCompile Include="test_sct_public_workflow.cpp" />
     <ClCompile Include="test_sct_document_header.cpp" />
     <ClCompile Include="test_sct_semantic_text.cpp" />
+    <ClCompile Include="test_sct_text_evidence.cpp" />
     <ClCompile Include="test_sct_opcode_schema.cpp" />
     <ClCompile Include="test_sct_real_fixtures.cpp" />
     <ClCompile Include="test_sct_roundtrip.cpp" />
