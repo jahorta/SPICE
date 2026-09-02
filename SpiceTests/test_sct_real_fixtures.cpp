@@ -423,3 +423,56 @@ TEST(SctRealFixtures, Me017bStructuredAnalysisIsDeterministicAndCoversEveryInstr
     }
     EXPECT_EQ(coveredInstructions, documentInstructionCount(*imported.document));
 }
+
+TEST(SctRealFixtures, Me017bIndexedStringGroupsHaveTypedMarkerCoverage)
+{
+    const auto fixture = findSctFixture("me017b.sct");
+    if (fixture.empty()) {
+        GTEST_SKIP() << "me017b.sct real fixture is not present in the ignored reference bundle.";
+    }
+    const auto parsed = spice::sct::SctParser{}.parseFile(fixture.string());
+    ASSERT_TRUE(parsed.parseOk);
+    const auto imported = spice::sct::SctDocumentImporter::import(parsed,
+        {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
+    ASSERT_TRUE(imported.document.has_value());
+    const auto evidence = imported.context.bind(imported.context.revisionProvenance());
+    ASSERT_TRUE(evidence.has_value());
+    const auto analysis = spice::sct::SctDocumentAnalysis::build(
+        *imported.document, &*evidence);
+
+    ASSERT_FALSE(analysis.stringGroups.importedGroups().empty());
+    EXPECT_EQ(analysis.stringGroups.currentGroups().size(),
+        analysis.stringGroups.importedGroups().size());
+    for (const auto& group : analysis.stringGroups.importedGroups()) {
+        const spice::sct::SctIndexedStringGroupRecord* current = nullptr;
+        if (group.markerSection) {
+            current = analysis.stringGroups.currentByMarker(*group.markerSection);
+            ASSERT_NE(current, nullptr);
+            const auto marker = std::find_if(imported.document->sections.begin(),
+                imported.document->sections.end(), [&](const auto& section) {
+                    return section.id == *group.markerSection;
+                });
+            ASSERT_NE(marker, imported.document->sections.end());
+            EXPECT_TRUE(std::holds_alternative<spice::sct::SctStringGroupMarkerSectionContent>(
+                marker->content));
+            EXPECT_TRUE(std::none_of(imported.document->opaqueAttachments.begin(),
+                imported.document->opaqueAttachments.end(), [&](const auto& attachment) {
+                    return attachment.anchor == spice::sct::SctOpaqueAnchor{*group.markerSection};
+                }));
+            EXPECT_TRUE(std::any_of(imported.context.receipt().sourceMap.records().begin(),
+                imported.context.receipt().sourceMap.records().end(), [&](const auto& record) {
+                    return record.role
+                            == spice::sct::SctSourceSpanRole::IndexedStringGroupMarkerPreamble
+                        && record.target
+                        && *record.target == spice::sct::SctImportedSourceTarget{
+                            spice::sct::SctDocumentEntityId{*group.markerSection}};
+                }));
+        } else if (!group.strings.empty()) {
+            current = analysis.stringGroups.currentContainingString(group.strings.front());
+        }
+        ASSERT_NE(current, nullptr);
+        EXPECT_EQ(current->basis, group.basis);
+        EXPECT_EQ(current->memberSections, group.memberSections);
+        EXPECT_EQ(current->strings, group.strings);
+    }
+}
