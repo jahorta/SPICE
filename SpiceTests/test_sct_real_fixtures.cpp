@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <algorithm>
+#include <ranges>
 #include <string>
 #include <utility>
 #include <vector>
@@ -382,4 +383,43 @@ TEST(SctRealFixtures, Me002eAmbiguousIndexedRecordRemainsWhollyOpaque)
     const auto* string = index.find(*imported.document, content->string.id);
     ASSERT_NE(string, nullptr);
     EXPECT_TRUE(std::holds_alternative<spice::sct::SctOpaqueText>(string->value));
+}
+
+TEST(SctRealFixtures, Me017bStructuredAnalysisIsDeterministicAndCoversEveryInstruction)
+{
+    const auto fixture = findSctFixture("me017b.sct");
+    if (fixture.empty()) {
+        GTEST_SKIP() << "me017b.sct real fixture is not present in the ignored reference bundle.";
+    }
+    const auto parsed = spice::sct::SctParser{}.parseFile(fixture.string());
+    ASSERT_TRUE(parsed.parseOk);
+    const auto imported = spice::sct::SctDocumentImporter::import(parsed,
+        {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
+    ASSERT_TRUE(imported.document.has_value());
+    const auto evidence = imported.context.bind(imported.context.revisionProvenance());
+    ASSERT_TRUE(evidence.has_value());
+
+    const auto aggregate = spice::sct::SctDocumentAnalysis::build(
+        *imported.document, &*evidence);
+    const auto standalone = spice::sct::SctStructuredControlFlowAnalysis::build(
+        *imported.document, &*evidence);
+    EXPECT_TRUE(std::ranges::equal(
+        aggregate.structuredControlFlow.sections(), standalone.sections()));
+
+    std::size_t coveredInstructions = 0;
+    for (const auto& section : aggregate.structuredControlFlow.sections()) {
+        for (const auto& block : section.blocks) {
+            ASSERT_FALSE(block.instructions.empty());
+            EXPECT_EQ(block.id.entryInstruction, block.instructions.front());
+            coveredInstructions += block.instructions.size();
+        }
+        for (const auto& region : section.regions) {
+            EXPECT_TRUE(std::ranges::none_of(region.evidence, [](const auto& item) {
+                return item.kind == spice::sct::SctStructureEvidenceKind::ImportedControlFlow
+                    || item.kind
+                        == spice::sct::SctStructureEvidenceKind::ImportedOpaqueControlFlowGap;
+            }));
+        }
+    }
+    EXPECT_EQ(coveredInstructions, documentInstructionCount(*imported.document));
 }

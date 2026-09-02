@@ -19,6 +19,7 @@
     <ClCompile Include="test_sct_ir.cpp" />
     <ClCompile Include="test_sct_document.cpp" />
     <ClCompile Include="test_sct_document_analysis.cpp" />
+    <ClCompile Include="test_sct_structured_control_flow.cpp" />
     <ClCompile Include="test_sct_contract_hardening.cpp" />
     <ClCompile Include="test_sct_document_export.cpp" />
     <ClCompile Include="test_sct_editing_contract.cpp" />
