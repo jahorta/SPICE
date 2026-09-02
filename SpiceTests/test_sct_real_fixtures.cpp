@@ -198,7 +198,9 @@ TEST(SctRealFixtures, Me017bImportsDeterministicCanonicalDocumentWithCompleteCov
         {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
     const auto second = spice::sct::SctDocumentImporter::import(parsed,
         {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
-    ASSERT_TRUE(first.document.has_value());
+    std::string importDiagnostics;
+    for (const auto& diagnostic : first.diagnostics) importDiagnostics += diagnostic.message + "\n";
+    ASSERT_TRUE(first.document.has_value()) << importDiagnostics;
     ASSERT_TRUE(second.document.has_value());
     EXPECT_EQ(first.document->sections.size(), second.document->sections.size());
     EXPECT_EQ(documentStringCount(*first.document), documentStringCount(*second.document));
@@ -226,21 +228,17 @@ TEST(SctRealFixtures, Me017bImportsDeterministicCanonicalDocumentWithCompleteCov
         }
     }
     EXPECT_GT(typedExpressions, 100u);
+    const auto evidence = first.context.bind(first.context.revisionProvenance);
+    ASSERT_TRUE(evidence);
 
-    std::vector<unsigned> coverage(parsed.file.originalPayloadBytes.size(), 0);
-    for (const auto& provenance : first.receipt.provenance) {
-        ASSERT_LE(static_cast<std::size_t>(provenance.decodedPayloadOffset) + provenance.byteSize, coverage.size());
-        for (std::size_t i = provenance.decodedPayloadOffset;
-             i < provenance.decodedPayloadOffset + provenance.byteSize; ++i) ++coverage[i];
-    }
-    EXPECT_TRUE(std::all_of(coverage.begin(), coverage.end(), [](unsigned claims) { return claims == 1; }));
+    EXPECT_TRUE(first.context.receipt.sourceMap.hasCompleteLeafCoverage());
     EXPECT_TRUE(std::none_of(first.document->opaqueAttachments.begin(), first.document->opaqueAttachments.end(),
         [&](const auto& attachment) {
             return attachment.fixedOffset == 0 && attachment.bytes.size() == parsed.file.originalPayloadBytes.size();
         }));
     const auto validation = spice::sct::SctDocumentValidator::validateForTarget(
         *first.document, spice::sct::SctPlatform::GameCube,
-        spice::sct::kSctWindows1252Byte7FEncoding, &first.receipt);
+        spice::sct::kSctWindows1252Byte7FEncoding, &*evidence);
     EXPECT_TRUE(validation.validForTarget);
 }
 
@@ -256,6 +254,8 @@ TEST(SctRealFixtures, Me004aCarriesGameCubeOnlyOpcode265)
     const auto imported = spice::sct::SctDocumentImporter::import(parsed,
         {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
     ASSERT_TRUE(imported.document.has_value());
+    const auto evidence = imported.context.bind(imported.context.revisionProvenance);
+    ASSERT_TRUE(evidence);
 
     const auto [opcode265Count, typedReferenceCount] = opcode265ReferenceCounts(*imported.document);
     ASSERT_GT(opcode265Count, 0u);
@@ -264,10 +264,10 @@ TEST(SctRealFixtures, Me004aCarriesGameCubeOnlyOpcode265)
     const auto structural = spice::sct::SctDocumentValidator::validateDocument(*imported.document);
     const auto gameCube = spice::sct::SctDocumentValidator::validateForTarget(
         *imported.document, spice::sct::SctPlatform::GameCube,
-        spice::sct::kSctWindows1252Byte7FEncoding, &imported.receipt);
+        spice::sct::kSctWindows1252Byte7FEncoding, &*evidence);
     const auto dreamcast = spice::sct::SctDocumentValidator::validateForTarget(
         *imported.document, spice::sct::SctPlatform::Dreamcast,
-        spice::sct::kSctWindows1252Byte7FEncoding, &imported.receipt);
+        spice::sct::kSctWindows1252Byte7FEncoding, &*evidence);
     EXPECT_TRUE(structural.validDocument);
     EXPECT_TRUE(gameCube.validForTarget);
     EXPECT_FALSE(dreamcast.validForTarget);
@@ -288,6 +288,8 @@ TEST(SctRealFixtures, Me017bStrictDocumentExportPreservesOpaqueBytesAndReimports
     const auto imported = spice::sct::SctDocumentImporter::import(parsed,
         {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
     ASSERT_TRUE(imported.document.has_value());
+    const auto evidence = imported.context.bind(imported.context.revisionProvenance);
+    ASSERT_TRUE(evidence);
 
     const spice::sct::SctDocumentExportOptions options{
         spice::sct::SctPlatform::GameCube,
@@ -296,7 +298,7 @@ TEST(SctRealFixtures, Me017bStrictDocumentExportPreservesOpaqueBytesAndReimports
         spice::sct::SctDocumentOutputWrapper::Aklz,
         spice::sct::SctOpaquePreservationPolicy::RequirePreservation};
     const auto exported = spice::sct::SctDocumentExporter::exportDocument(
-        *imported.document, options, &imported.receipt);
+        *imported.document, options, &*evidence);
     ASSERT_TRUE(exported.success) << documentDiagnosticMessages(exported.diagnostics);
     ASSERT_TRUE(exported.layout.has_value());
     ASSERT_EQ(exported.preservation.attachments.size(), imported.document->opaqueAttachments.size());
@@ -337,6 +339,8 @@ TEST(SctRealFixtures, Me004aStrictExportAcceptsGameCubeAndRejectsDreamcast)
     const auto imported = spice::sct::SctDocumentImporter::import(parsed,
         {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
     ASSERT_TRUE(imported.document.has_value());
+    const auto evidence = imported.context.bind(imported.context.revisionProvenance);
+    ASSERT_TRUE(evidence);
     spice::sct::SctDocumentExportOptions options{
         spice::sct::SctPlatform::GameCube,
         spice::sct::kSctWindows1252Byte7FEncoding,
@@ -344,7 +348,7 @@ TEST(SctRealFixtures, Me004aStrictExportAcceptsGameCubeAndRejectsDreamcast)
         spice::sct::SctDocumentOutputWrapper::Raw,
         spice::sct::SctOpaquePreservationPolicy::RequirePreservation};
     const auto gameCube = spice::sct::SctDocumentExporter::exportDocument(
-        *imported.document, options, &imported.receipt);
+        *imported.document, options, &*evidence);
     ASSERT_TRUE(gameCube.success) << documentDiagnosticMessages(gameCube.diagnostics);
     const auto reparsed = spice::sct::SctParser{}.parse(gameCube.bytes, "me004a.document-export.sct");
     ASSERT_TRUE(reparsed.parseOk);
@@ -361,7 +365,7 @@ TEST(SctRealFixtures, Me004aStrictExportAcceptsGameCubeAndRejectsDreamcast)
     options.targetPlatform = spice::sct::SctPlatform::Dreamcast;
     options.byteOrder = spice::sct::SctDocumentOutputByteOrder::LittleEndian;
     const auto dreamcast = spice::sct::SctDocumentExporter::exportDocument(
-        *imported.document, options, &imported.receipt);
+        *imported.document, options, &*evidence);
     EXPECT_FALSE(dreamcast.success);
     EXPECT_TRUE(std::any_of(dreamcast.diagnostics.begin(), dreamcast.diagnostics.end(), [](const auto& diagnostic) {
         return diagnostic.code == spice::sct::SctDiagnosticCode::OpcodeUnavailable;
@@ -388,7 +392,7 @@ TEST(SctRealFixtures, Me002eAmbiguousIndexedRecordRemainsWhollyOpaque)
     const auto* content = std::get_if<spice::sct::SctStringSectionContent>(&section->content);
     ASSERT_NE(content, nullptr);
     const auto index = spice::sct::SctDocumentIndex::build(*imported.document);
-    const auto* string = index.find(content->string.id);
+    const auto* string = index.find(*imported.document, content->string.id);
     ASSERT_NE(string, nullptr);
     EXPECT_TRUE(std::holds_alternative<spice::sct::SctOpaqueText>(string->value));
 }

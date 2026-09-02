@@ -18,6 +18,7 @@
     <ClCompile Include="test_mlk_scanner.cpp" />
     <ClCompile Include="test_sct_ir.cpp" />
     <ClCompile Include="test_sct_document.cpp" />
+    <ClCompile Include="test_sct_document_analysis.cpp" />
     <ClCompile Include="test_sct_contract_hardening.cpp" />
     <ClCompile Include="test_sct_document_export.cpp" />
     <ClCompile Include="test_sct_editing_contract.cpp" />
@@ -28,6 +29,7 @@
     <ClCompile Include="test_sct_opcode_schema.cpp" />
     <ClCompile Include="test_sct_real_fixtures.cpp" />
     <ClCompile Include="test_sct_roundtrip.cpp" />
+    <ClCompile Include="test_sct_scpt_v2.cpp" />
     <ClCompile Include="test_sst_sml_parser.cpp" />
     <ClCompile Include="test_std_parser.cpp" />
     <ClCompile Include="test_sa3dport_stage1.cpp" />
