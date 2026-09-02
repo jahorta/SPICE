@@ -94,6 +94,23 @@ std::vector<std::uint8_t> directLevel(const PixelFormat format, const std::uint3
     return result;
 }
 
+std::vector<std::uint8_t> rectangleTwiddledLevel(
+    const PixelFormat format, const std::uint32_t width, const std::uint32_t height)
+{
+    const auto tileSize = std::min(width, height);
+    const auto tilesPerRow = width / tileSize;
+    std::vector<std::uint8_t> result(static_cast<std::size_t>(width) * height * 2U);
+    for (std::uint32_t y = 0; y < height; ++y) {
+        for (std::uint32_t x = 0; x < width; ++x) {
+            const auto tileIndex = static_cast<std::size_t>(y / tileSize) * tilesPerRow + x / tileSize;
+            const auto withinTile = (twiddle(x % tileSize) << 1U) | twiddle(y % tileSize);
+            const auto index = tileIndex * static_cast<std::size_t>(tileSize) * tileSize + withinTile;
+            writeU16(result, index * 2U, sampleWord(format, x + y * width + 1U));
+        }
+    }
+    return result;
+}
+
 std::size_t smallCodebookEntries(const std::uint32_t size, const bool mipmapped)
 {
     if (mipmapped) {
@@ -160,6 +177,8 @@ std::vector<std::uint8_t> payloadFor(
                 appendWord(bytes, sampleWord(format, x + y * width + 1));
         return bytes;
     }
+    if (layout == DataLayout::RectangleTwiddled)
+        return rectangleTwiddledLevel(format, width, height);
     if (layout == DataLayout::Vq || layout == DataLayout::VqMipmaps ||
         layout == DataLayout::SmallVq || layout == DataLayout::SmallVqMipmaps) {
         return vqPayload(format, width,
@@ -379,13 +398,17 @@ TEST(SpicePvmDecoder, DecodesEveryObservedLayoutForEveryObservedPixelFormat)
     const std::array layouts{
         DataLayout::Twiddled, DataLayout::TwiddledMipmaps,
         DataLayout::Vq, DataLayout::VqMipmaps, DataLayout::Rectangle,
+        DataLayout::RectangleTwiddled,
         DataLayout::SmallVq, DataLayout::SmallVqMipmaps,
         DataLayout::TwiddledMipmapsDma};
     for (const auto format : formats) {
         for (const auto layout : layouts) {
-            const bool rectangle = layout == DataLayout::Rectangle;
+            const bool rectangle = layout == DataLayout::Rectangle ||
+                layout == DataLayout::RectangleTwiddled;
             const bool small = layout == DataLayout::SmallVq || layout == DataLayout::SmallVqMipmaps;
-            const std::uint16_t width = rectangle ? 3 : (small ? 16 : 4);
+            const std::uint16_t width = rectangle
+                ? (layout == DataLayout::RectangleTwiddled ? 4 : 3)
+                : (small ? 16 : 4);
             const std::uint16_t height = rectangle ? 2 : width;
             const auto parsed = spice::pvm::parsing::parsePvrTexture(
                 makePvr(format, layout, width, height, payloadFor(format, layout, width, height)));
@@ -454,11 +477,67 @@ TEST(SpicePvmDecoder, ExposesMortonAndVqVectorOrientation)
     EXPECT_NE(pixelAt(vq.mipLevels[0].image, 0, 1), pixelAt(vq.mipLevels[0].image, 1, 0));
 }
 
+TEST(SpicePvmDecoder, DecodesRectangleTwiddledTilesAlongEitherAxis)
+{
+    for (const auto format : {PixelFormat::Argb1555, PixelFormat::Rgb565, PixelFormat::Argb4444}) {
+        for (const auto [width, height] : std::array<std::pair<std::uint16_t, std::uint16_t>, 5>{
+                 std::pair{4U, 8U}, std::pair{8U, 4U}, std::pair{4U, 4U},
+                 std::pair{128U, 256U}, std::pair{256U, 128U}}) {
+            const auto texture = spice::pvm::parsing::parsePvrTexture(
+                makePvr(format, DataLayout::RectangleTwiddled, width, height,
+                    payloadFor(format, DataLayout::RectangleTwiddled, width, height)));
+            ASSERT_EQ(texture.dataLayout, DataLayout::RectangleTwiddled);
+            const auto decoded = spice::pvm::decoding::decodePvrTexture(texture);
+            ASSERT_EQ(decoded.status, ParseStatus::Complete) << width << "x" << height;
+            ASSERT_EQ(decoded.mipLevels.size(), 1U);
+            EXPECT_EQ(decoded.mipLevels[0].sourceRange.offset, texture.textureDataRange.offset);
+            EXPECT_EQ(decoded.mipLevels[0].sourceRange.size, texture.textureDataRange.size);
+            const auto linear = spice::pvm::decoding::decodePvrTexture(
+                spice::pvm::parsing::parsePvrTexture(
+                    makePvr(format, DataLayout::Rectangle, width, height,
+                        payloadFor(format, DataLayout::Rectangle, width, height))));
+            ASSERT_EQ(linear.status, ParseStatus::Complete);
+            EXPECT_EQ(decoded.mipLevels[0].image.pixels,
+                linear.mipLevels[0].image.pixels);
+        }
+    }
+}
+
 TEST(SpicePvmDecoder, RejectsInvalidCombinationsAndPayloads)
 {
     const auto nonsquare = spice::pvm::parsing::parsePvrTexture(
         makePvr(PixelFormat::Rgb565, DataLayout::Twiddled, 4, 2, std::vector<std::uint8_t>(16)));
     EXPECT_EQ(spice::pvm::decoding::decodePvrTexture(nonsquare).status, ParseStatus::Failed);
+
+    const auto invalidRectangleTwiddled = spice::pvm::parsing::parsePvrTexture(
+        makePvr(PixelFormat::Rgb565, DataLayout::RectangleTwiddled, 6, 4,
+            std::vector<std::uint8_t>(48U)));
+    EXPECT_EQ(spice::pvm::decoding::decodePvrTexture(invalidRectangleTwiddled).status,
+        ParseStatus::Failed);
+
+    auto truncatedRectangleTwiddled = payloadFor(
+        PixelFormat::Rgb565, DataLayout::RectangleTwiddled, 8, 4);
+    truncatedRectangleTwiddled.pop_back();
+    EXPECT_EQ(spice::pvm::decoding::decodePvrTexture(
+        spice::pvm::parsing::parsePvrTexture(
+            makePvr(PixelFormat::Rgb565, DataLayout::RectangleTwiddled, 8, 4,
+                truncatedRectangleTwiddled))).status,
+        ParseStatus::Failed);
+
+    auto paddedRectangleTwiddled = payloadFor(
+        PixelFormat::Rgb565, DataLayout::RectangleTwiddled, 1, 2);
+    paddedRectangleTwiddled.resize(32U, 0U);
+    EXPECT_EQ(spice::pvm::decoding::decodePvrTexture(
+        spice::pvm::parsing::parsePvrTexture(
+            makePvr(PixelFormat::Rgb565, DataLayout::RectangleTwiddled, 1, 2,
+                paddedRectangleTwiddled))).status,
+        ParseStatus::Complete);
+    paddedRectangleTwiddled.back() = 1U;
+    EXPECT_EQ(spice::pvm::decoding::decodePvrTexture(
+        spice::pvm::parsing::parsePvrTexture(
+            makePvr(PixelFormat::Rgb565, DataLayout::RectangleTwiddled, 1, 2,
+                paddedRectangleTwiddled))).status,
+        ParseStatus::Failed);
 
     auto shortPayload = payloadFor(PixelFormat::Rgb565, DataLayout::Vq, 4, 4);
     shortPayload.pop_back();
@@ -547,15 +626,18 @@ TEST(SpicePvmEncoder, RoundTripsEveryPromotedPixelFormatAndLayoutDeterministical
     const std::array formats{PixelFormat::Argb1555, PixelFormat::Rgb565, PixelFormat::Argb4444};
     const std::array layouts{
         DataLayout::Twiddled, DataLayout::TwiddledMipmaps, DataLayout::Vq,
-        DataLayout::VqMipmaps, DataLayout::Rectangle, DataLayout::SmallVq,
+        DataLayout::VqMipmaps, DataLayout::Rectangle, DataLayout::RectangleTwiddled,
+        DataLayout::SmallVq,
         DataLayout::SmallVqMipmaps, DataLayout::TwiddledMipmapsDma,
     };
     for (const auto format : formats) {
         for (const auto layout : layouts) {
             const bool smallVq = layout == DataLayout::SmallVq || layout == DataLayout::SmallVqMipmaps;
-            const bool rectangle = layout == DataLayout::Rectangle;
-            const auto width = smallVq ? 16U : 4U;
-            const auto height = rectangle ? 2U : width;
+            const bool rectangle = layout == DataLayout::Rectangle ||
+                layout == DataLayout::RectangleTwiddled;
+            const auto width = smallVq ? 16U :
+                (layout == DataLayout::RectangleTwiddled ? 8U : 4U);
+            const auto height = rectangle ? 4U : width;
             spice::pvm::encoding::PvrEncodeOptions options{};
             options.pixelFormat = format;
             options.dataLayout = layout;
@@ -586,6 +668,15 @@ TEST(SpicePvmEncoder, RoundTripsEveryPromotedPixelFormatAndLayoutDeterministical
             EXPECT_EQ(decoded.mipLevels.size(), first.mipSourceRanges.size());
         }
     }
+}
+
+TEST(SpicePvmEncoder, RejectsMipInputForRectangleTwiddledLayout)
+{
+    const std::array images{makeEncodeImage(8U, 4U), makeEncodeImage(4U, 2U)};
+    spice::pvm::encoding::PvrEncodeOptions options{};
+    options.pixelFormat = PixelFormat::Rgb565;
+    options.dataLayout = DataLayout::RectangleTwiddled;
+    EXPECT_FALSE(spice::pvm::encoding::encodePvrTexture(images, options).ok());
 }
 
 TEST(SpicePvmEncoder, SupportsAllSmallVqSdkDimensionsAndExplicitMipChains)
@@ -769,6 +860,33 @@ void printCorpusResult(const char* label, const CorpusResult& result)
         << " base_fnv1a64=0x" << std::hex << std::setw(16) << std::setfill('0') << result.basePixelHash
         << " all_mip_fnv1a64=0x" << std::setw(16) << result.allMipPixelHash
         << std::dec << std::setfill(' ') << '\n';
+}
+
+TEST(SpicePvmCorpus, DecodesKnownEuDisc2RectangleTwiddledTexturesReadOnly)
+{
+    const std::filesystem::path fieldRoot = R"(D:\SoADC\SoA(Eu)Disc2Assets\FIELD)";
+    if (!std::filesystem::exists(fieldRoot))
+        GTEST_SKIP() << "EU Dreamcast Disc 2 field corpus is not available on this machine";
+
+    std::size_t rectangleTwiddledCount = 0U;
+    for (const auto* filename : {"A580A.MLD", "A582A.MLD", "A583A.MLD"}) {
+        const auto path = fieldRoot / filename;
+        ASSERT_TRUE(std::filesystem::exists(path)) << path.string();
+        const auto scan = spice::pvm::parsing::scanPvrTextures(readAllBytes(path));
+        for (const auto& texture : scan.textures) {
+            if (texture.dataLayout != DataLayout::RectangleTwiddled)
+                continue;
+            ++rectangleTwiddledCount;
+            EXPECT_EQ(texture.pixelFormat, PixelFormat::Rgb565);
+            EXPECT_EQ(texture.width, 128U);
+            EXPECT_EQ(texture.height, 256U);
+            const auto decoded = spice::pvm::decoding::decodePvrTexture(texture);
+            ASSERT_EQ(decoded.status, ParseStatus::Complete) << path.string();
+            ASSERT_EQ(decoded.mipLevels.size(), 1U);
+            EXPECT_EQ(decoded.mipLevels[0].image.pixels.size(), 128U * 256U * 4U);
+        }
+    }
+    EXPECT_EQ(rectangleTwiddledCount, 6U);
 }
 
 TEST(SpicePvmCorpus, DecodesRepresentativeEuAndUsDreamcastSourcesReadOnly)

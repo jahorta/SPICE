@@ -99,6 +99,7 @@ std::vector<std::uint8_t> makeBaseMld(const std::uint32_t resourceAddress = 0U,
     writeU32(bytes, entry + 0x14U, static_cast<std::uint32_t>(objects));
     writeU32(bytes, entry + 0x18U, static_cast<std::uint32_t>(grounds));
     writeU32(bytes, entry + 0x1CU, static_cast<std::uint32_t>(motions));
+    writeU32(bytes, entry + 0x20U, 0U);
     const char name[] = "wall";
     std::copy_n(name, 4U, bytes.begin() + static_cast<std::ptrdiff_t>(entry + 0x24U));
     writeF32(bytes, entry + 0x5CU, 1.0F);
@@ -249,6 +250,7 @@ TEST(MldCanonical, ParseBytesOwnsSharedListsAndCompleteSourceRanges) {
     const auto file = MldParser{}.parseBytes(bytes);
     ASSERT_EQ(file.parseStatus, spice::mld::model::MldParseStatus::Complete)
         << describeDiagnostics(file);
+    EXPECT_EQ(file.assetStatus, spice::mld::model::MldResourceStatus::Empty);
     ASSERT_EQ(file.entries.size(), 1U);
     ASSERT_TRUE(file.entries[0].entry.paramList2);
     ASSERT_TRUE(file.entries[0].entry.functionParameters);
@@ -469,18 +471,20 @@ TEST(MldCanonical, WriterPreservesAndRebuildsNormalDiffuseGobj) {
     EXPECT_FALSE(MldFileWriter{}.write(invalid).ok());
 }
 
-TEST(MldCanonical, WrappedRealFixtureRetainsPartialDiagnosticsAndProjectsVisibleGeometry) {
+TEST(MldCanonical, WrappedRealFixtureSeparatesTextureListHealthAndProjectsVisibleGeometry) {
     const auto fixture = findMldFixture("s044_sml_entry_0.mld");
     if (fixture.empty()) {
         GTEST_SKIP() << "Private S044 MLD fixture is unavailable";
     }
     const auto file = MldParser{}.parseBytes(readBytes(fixture));
-    ASSERT_EQ(file.parseStatus, spice::mld::model::MldParseStatus::Partial)
+    ASSERT_EQ(file.parseStatus, spice::mld::model::MldParseStatus::Complete)
         << describeDiagnostics(file);
-    EXPECT_TRUE(std::any_of(file.parseDiagnostics.begin(), file.parseDiagnostics.end(), [](const auto& diagnostic) {
-        return diagnostic.severity == spice::mld::model::MldDiagnostic::Severity::Warning
-            && diagnostic.sourceOffset == 0x9CU;
-    }));
+    EXPECT_EQ(file.assetStatus, spice::mld::model::MldResourceStatus::Partial);
+    const auto textureList = file.textureListResources.find(0x9CU);
+    ASSERT_NE(textureList, file.textureListResources.end());
+    EXPECT_EQ(textureList->second.status, spice::mld::model::MldResourceStatus::Complete);
+    EXPECT_TRUE(textureList->second.diagnostics.empty());
+    EXPECT_FALSE(file.objectResources.contains(0x9CU));
     ASSERT_FALSE(file.entries.empty());
     ASSERT_TRUE(file.entries[0].entry.objectAddresses);
     EXPECT_NE(std::find(file.entries[0].entry.objectAddresses->values.begin(),

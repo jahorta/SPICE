@@ -264,6 +264,84 @@ std::vector<std::uint8_t> makeMinimalMld(Endian endian) {
     return bytes;
 }
 
+void clearSyntheticGround(std::vector<std::uint8_t>& bytes, const Endian endian) {
+    const std::array<std::uint32_t, 0> empty{};
+    writeList(bytes, kListGrounds, empty, endian);
+}
+
+void writeDirectTextureList(std::vector<std::uint8_t>& bytes,
+    const std::size_t offset,
+    const char* tag,
+    const Endian endian,
+    const bool invalidNamePointer = false) {
+    writeTag(bytes, offset, tag);
+    writeU32(bytes, offset + 4U, 0x30U, endian);
+    writeU32(bytes, offset + 8U, 0xAABBCCDDU, endian);
+    writeU32(bytes, offset + 12U, 1U, endian);
+    writeU32(bytes, offset + 16U, invalidNamePointer ? 0x100U : 0x20U, endian);
+    writeU32(bytes, offset + 20U, 0x11223344U, endian);
+    writeU32(bytes, offset + 24U, 0x55667788U, endian);
+    const std::string name = "deck_a";
+    std::copy(name.begin(), name.end(),
+        bytes.begin() + static_cast<std::ptrdiff_t>(offset + 0x28U));
+}
+
+std::vector<std::uint8_t> makeDirectTextureListMld(
+    const Endian endian,
+    const char* tag,
+    const bool invalidNamePointer = false,
+    const bool sharedByTwoEntries = false) {
+    constexpr std::uint32_t textureList = 0x180U;
+    auto bytes = makeMinimalMld(endian);
+    bytes.resize(0x200U, 0U);
+    clearSyntheticGround(bytes, endian);
+    writeU32(bytes, 0x0CU, textureList, endian);
+    writeU32(bytes, kEntryOffset + 0x20U, textureList, endian);
+    writeDirectTextureList(bytes, textureList, tag, endian, invalidNamePointer);
+    if (sharedByTwoEntries) {
+        constexpr std::size_t secondEntry = kEntryOffset + kEntrySize;
+        std::copy_n(bytes.begin() + static_cast<std::ptrdiff_t>(kEntryOffset), kEntrySize,
+            bytes.begin() + static_cast<std::ptrdiff_t>(secondEntry));
+        writeU32(bytes, 0x00U, 2U, endian);
+        writeU32(bytes, secondEntry, 0x102U, endian);
+    }
+    return bytes;
+}
+
+std::vector<std::uint8_t> makeWrappedTextureListMld(const Endian endian) {
+    constexpr std::uint32_t wrapper = 0x180U;
+    constexpr std::uint32_t textureList = 0x190U;
+    auto bytes = makeMinimalMld(endian);
+    bytes.resize(0x210U, 0U);
+    clearSyntheticGround(bytes, endian);
+    writeU32(bytes, 0x0CU, wrapper, endian);
+    writeU32(bytes, kEntryOffset + 0x20U, wrapper, endian);
+    writeU32(bytes, wrapper, 0x12345678U, endian);
+    writeU32(bytes, wrapper + 4U, 0U, endian);
+    writeU32(bytes, wrapper + 8U, textureList, endian);
+    writeDirectTextureList(bytes, textureList, "NJTL", endian);
+    return bytes;
+}
+
+std::vector<std::uint8_t> makeCountedTextureListMld(const Endian endian) {
+    constexpr std::uint32_t textureList = 0x180U;
+    constexpr std::uint32_t nameOffset = 0x1A0U;
+    auto bytes = makeMinimalMld(endian);
+    bytes.resize(0x1C0U, 0U);
+    clearSyntheticGround(bytes, endian);
+    writeU32(bytes, 0x0CU, textureList, endian);
+    writeU32(bytes, kEntryOffset + 0x20U, textureList, endian);
+    writeU32(bytes, textureList, 0xCAFEBABEU, endian);
+    writeU32(bytes, textureList + 4U, 1U, endian);
+    writeU32(bytes, textureList + 8U, nameOffset, endian);
+    writeU32(bytes, textureList + 12U, 0x11111111U, endian);
+    writeU32(bytes, textureList + 16U, 0x22222222U, endian);
+    const std::string name = "counted";
+    std::copy(name.begin(), name.end(),
+        bytes.begin() + static_cast<std::ptrdiff_t>(nameOffset));
+    return bytes;
+}
+
 void writeSa3dPointer(std::vector<std::uint8_t>& bytes,
     std::size_t offset,
     std::uint32_t modelBlockRelativeOffset) {
@@ -505,6 +583,98 @@ TEST(MldEndian, ParsesBigAndLittleEndianFixturesToEquivalentIr) {
     EXPECT_EQ(be.entries[0].entry.groundAddresses->values, le.entries[0].entry.groundAddresses->values);
 }
 
+TEST(MldResourceHealth, ParsesDirectTextureListsInBothEndianModesWithoutObjectWarnings) {
+    for (const auto endian : {Endian::Big, Endian::Little}) {
+        for (const auto tag : {"NJTL", "GJTL"}) {
+            const auto source = makeDirectTextureListMld(endian, tag);
+            const auto file = MldParser{}.parseFile(source);
+            EXPECT_EQ(file.parseStatus, spice::mld::model::MldParseStatus::Complete);
+            EXPECT_EQ(file.assetStatus, spice::mld::model::MldResourceStatus::Complete);
+            EXPECT_TRUE(file.objectResources.empty());
+            ASSERT_EQ(file.textureListResources.size(), 1U);
+            const auto& resource = file.textureListResources.at(0x180U);
+            EXPECT_EQ(resource.layout, tag[0] == 'N'
+                ? spice::mld::model::MldTextureListLayout::Njtl
+                : spice::mld::model::MldTextureListLayout::Gjtl);
+            EXPECT_EQ(resource.status, spice::mld::model::MldResourceStatus::Complete);
+            EXPECT_EQ(resource.listRange.offset, 0x180U);
+            EXPECT_EQ(resource.listRange.size, 0x38U);
+            EXPECT_EQ(resource.sourceBytes.size(), resource.listRange.size);
+            ASSERT_EQ(resource.entries.size(), 1U);
+            EXPECT_EQ(resource.entries[0].name, "deck_a");
+            EXPECT_EQ(resource.entries[0].rawNamePointer, 0x20U);
+            EXPECT_EQ(resource.entries[0].recordRange.offset, 0x190U);
+            EXPECT_EQ(resource.entries[0].rawRecordBytes.size(), 12U);
+            const auto projected = MldParser{}.project(file);
+            ASSERT_EQ(projected.entryList.size(), 1U);
+            EXPECT_EQ(projected.entryList[0].textureNames,
+                (std::vector<std::string>{"deck_a"}));
+            const auto written = MldFileWriter{}.write(file);
+            ASSERT_TRUE(written.ok());
+            EXPECT_EQ(written.bytes, source);
+        }
+    }
+}
+
+TEST(MldResourceHealth, ParsesWrappersCountedRecordsAndSharedTexturePointers) {
+    for (const auto endian : {Endian::Big, Endian::Little}) {
+        const auto wrapped = MldParser{}.parseFile(makeWrappedTextureListMld(endian));
+        ASSERT_EQ(wrapped.textureListResources.size(), 1U);
+        const auto& wrapper = wrapped.textureListResources.at(0x180U);
+        EXPECT_EQ(wrapper.layout, spice::mld::model::MldTextureListLayout::Wrapper);
+        ASSERT_TRUE(wrapper.wrapperRange.has_value());
+        EXPECT_EQ(wrapper.wrapperRange->offset, 0x180U);
+        EXPECT_EQ(wrapper.resolvedListOffset, 0x190U);
+        EXPECT_EQ(wrapper.sourceBytes.size(), 0x48U);
+        ASSERT_EQ(wrapper.entries.size(), 1U);
+        EXPECT_EQ(wrapper.entries[0].name, "deck_a");
+        EXPECT_TRUE(wrapped.objectResources.empty());
+
+        const auto counted = MldParser{}.parseFile(makeCountedTextureListMld(endian));
+        ASSERT_EQ(counted.textureListResources.size(), 1U);
+        const auto& table = counted.textureListResources.at(0x180U);
+        EXPECT_EQ(table.layout, spice::mld::model::MldTextureListLayout::CountedRecords);
+        EXPECT_EQ(table.status, spice::mld::model::MldResourceStatus::Complete);
+        ASSERT_EQ(table.entries.size(), 1U);
+        EXPECT_EQ(table.entries[0].name, "counted");
+        EXPECT_EQ(table.entries[0].rawNamePointer, 0x1A0U);
+
+        const auto shared = MldParser{}.parseFile(
+            makeDirectTextureListMld(endian, "NJTL", false, true));
+        ASSERT_EQ(shared.entries.size(), 2U);
+        EXPECT_EQ(shared.textureListResources.size(), 1U);
+        const auto projection = MldParser{}.project(shared);
+        ASSERT_EQ(projection.entryList.size(), 2U);
+        EXPECT_EQ(projection.entryList[0].textureNames,
+            (std::vector<std::string>{"deck_a"}));
+        EXPECT_EQ(projection.entryList[1].textureNames,
+            projection.entryList[0].textureNames);
+    }
+}
+
+TEST(MldResourceHealth, ResourceFailureDoesNotChangeStructuralParseStatus) {
+    const auto source = makeDirectTextureListMld(Endian::Big, "NJTL", true);
+    const auto file = MldParser{}.parseFile(source);
+    EXPECT_EQ(file.parseStatus, spice::mld::model::MldParseStatus::Complete);
+    EXPECT_TRUE(std::none_of(file.parseDiagnostics.begin(), file.parseDiagnostics.end(),
+        [](const auto& diagnostic) {
+            return diagnostic.severity != spice::mld::model::MldDiagnostic::Severity::Info;
+        }));
+    EXPECT_EQ(file.assetStatus, spice::mld::model::MldResourceStatus::Partial);
+    const auto& resource = file.textureListResources.at(0x180U);
+    EXPECT_EQ(resource.status, spice::mld::model::MldResourceStatus::Partial);
+    ASSERT_EQ(resource.diagnostics.size(), 1U);
+    EXPECT_EQ(resource.diagnostics[0].scope,
+        spice::mld::model::MldDiagnosticScope::Resource);
+    EXPECT_EQ(resource.diagnostics[0].resourceKind,
+        spice::mld::model::MldResourceKind::TextureList);
+    EXPECT_EQ(resource.diagnostics[0].sourceOffset, 0x190U);
+    EXPECT_FALSE(MldParser{}.project(file).diagnostics.empty());
+    const auto written = MldFileWriter{}.write(file);
+    ASSERT_TRUE(written.ok());
+    EXPECT_EQ(written.bytes, source);
+}
+
 TEST(MldEndian, PreservesFullMotionAddressSlotListWithZeroEntries) {
     auto bytes = makeMinimalMld(Endian::Big);
     bytes.resize(0x220U, 0U);
@@ -539,6 +709,7 @@ TEST(MldParser, ResolvesWrappedObjectModelOffsetBeforeFallbackScan) {
     writeU32(bytes, 0x180U, 0x40U, Endian::Big);
     writeU32(bytes, 0x184U, 0x80U, Endian::Big);
     writeU32(bytes, 0x188U, 0x10U, Endian::Big);
+    writeU32(bytes, kEntryOffset + 0x20U, 0x190U, Endian::Big);
     writeTag(bytes, 0x190U, "NJTL");
     writeU32(bytes, 0x194U, 0x20U, Endian::Big);
     writeU32(bytes, 0x19CU, 0U, Endian::Big);
@@ -561,6 +732,11 @@ TEST(MldParser, ResolvesWrappedObjectModelOffsetBeforeFallbackScan) {
     EXPECT_EQ(*found->modelReadOffset, 0x40U);
     EXPECT_EQ(*found->textureListOffset, 0x190U);
     EXPECT_EQ(found->wrapperLayout, "mld-object-wrapper");
+
+    const auto file = parser.parseFile(bytes);
+    EXPECT_TRUE(file.textureListResources.contains(0x190U));
+    EXPECT_FALSE(file.objectResources.contains(0x190U));
+    EXPECT_TRUE(file.objectResources.contains(0x180U));
 }
 
 TEST(MldParser, ParsesSyntheticWrappedMldObjectIntoBlenderIrGeometry) {
@@ -1415,7 +1591,7 @@ TEST(MldDreamcastTextureCorpus, ParsesAndNoEditWritesRegionalMldArchivesReadOnly
                     EXPECT_EQ(entry.encoding, spice::mld::model::MldTextureEncoding::Pvr)
                         << item.path().string();
                     ASSERT_FALSE(entry.encodedData.empty()) << item.path().string() << " diagnostic="
-                        << (entry.diagnostics.empty() ? "none" : entry.diagnostics.front());
+                        << (entry.diagnostics.empty() ? "none" : entry.diagnostics.front().message);
                     ++textures;
                 }
                 const auto written = MldFileWriter{}.write(file);
