@@ -4,6 +4,7 @@
 #include "../SpiceGvm/SpiceGvm.h"
 #include "../SpicePvm/SpicePvm.h"
 #include "../Compression/Aklz.h"
+#include "../Sa3Dport/Sa3Dport.h"
 
 #include <gtest/gtest.h>
 
@@ -339,6 +340,39 @@ std::vector<std::uint8_t> makeWrappedObjectMldWithTriangleGeometry() {
     return bytes;
 }
 
+void writeEmptyNjMotion(
+    std::vector<std::uint8_t>& bytes,
+    const std::size_t offset,
+    const char* tag) {
+    if (bytes.size() < offset + 36U) {
+        bytes.resize(offset + 36U, 0U);
+    }
+    writeTag(bytes, offset, tag);
+    writeU32(bytes, offset + 4U, 16U, Endian::Little);
+    writeU32(bytes, offset + 8U, 0U, Endian::Little);
+    writeU32(bytes, offset + 12U, 23U, Endian::Little);
+    writeU16(bytes, offset + 16U, 0U, Endian::Little);
+    writeU16(bytes, offset + 18U, 0U, Endian::Little);
+    writeU32(bytes, offset + 20U, 0U, Endian::Little);
+    writeTag(bytes, offset + 24U, "POF0");
+    writeU32(bytes, offset + 28U, 4U, Endian::Little);
+    writeU32(bytes, offset + 32U, 0U, Endian::Little);
+}
+
+std::vector<std::uint8_t> makeWrappedObjectMldWithMotions(
+    const std::span<const std::uint32_t> objectAddresses,
+    const std::span<const std::pair<std::uint32_t, const char*>> motions) {
+    auto bytes = makeWrappedObjectMldWithTriangleGeometry();
+    std::vector<std::uint32_t> motionAddresses{};
+    for (const auto& [address, tag] : motions) {
+        motionAddresses.push_back(address);
+        writeEmptyNjMotion(bytes, address, tag);
+    }
+    writeList(bytes, kListObjects, objectAddresses, Endian::Big);
+    writeList(bytes, kListMotions, motionAddresses, Endian::Big);
+    return bytes;
+}
+
 spice::gvm::model::RgbaImage makeImage(std::uint32_t width, std::uint32_t height, std::uint8_t bias = 0U) {
     spice::gvm::model::RgbaImage image{};
     image.width = width;
@@ -555,6 +589,421 @@ TEST(MldParser, ParsesSyntheticWrappedMldObjectIntoBlenderIrGeometry) {
     ASSERT_EQ(parsed.blenderIrScene->indexEntries.size(), 1U);
     EXPECT_FALSE(parsed.blenderIrScene->indexEntries[0].objectTreeIndices.empty());
     EXPECT_FALSE(parsed.blenderIrScene->indexEntries[0].meshIndices.empty());
+}
+
+TEST(MldParser, BuildsUniqueNodeAndCameraRelationsWithoutSelectingCameraBinding) {
+    constexpr std::array<std::uint32_t, 1> objects{0x180U};
+    constexpr std::array motions{
+        std::pair<std::uint32_t, const char*>{0x300U, "NMDM"},
+        std::pair<std::uint32_t, const char*>{0x340U, "NCAM"},
+        std::pair<std::uint32_t, const char*>{0x380U, "NSSM"},
+    };
+    const auto bytes = makeWrappedObjectMldWithMotions(objects, motions);
+    MldParser parser{};
+    const auto file = parser.parseFile(bytes);
+
+    ASSERT_EQ(file.motionRelations.size(), 3U);
+    EXPECT_EQ(file.motionRelations[0].motionSlot, 0U);
+    EXPECT_EQ(file.motionRelations[0].motionKind, Sa3Dport::File::NinjaMotionKind::Node);
+    EXPECT_EQ(file.motionRelations[0].scope,
+        spice::mld::model::MldMotionRelationScope::SameEntryObjectList);
+    EXPECT_EQ(file.motionRelations[0].status, spice::mld::model::MldMotionRelationStatus::Unique);
+    ASSERT_EQ(file.motionRelations[0].targetCandidates.size(), 1U);
+    EXPECT_TRUE(file.motionRelations[0].targetCandidates[0].compatible);
+    EXPECT_EQ(file.motionRelations[1].motionKind, Sa3Dport::File::NinjaMotionKind::Camera);
+    EXPECT_EQ(file.motionRelations[1].status, spice::mld::model::MldMotionRelationStatus::Camera);
+    EXPECT_EQ(file.motionRelations[1].scope,
+        spice::mld::model::MldMotionRelationScope::NoObjectTarget);
+    EXPECT_TRUE(file.motionRelations[1].targetCandidates.empty());
+    EXPECT_EQ(file.motionRelations[2].motionKind, Sa3Dport::File::NinjaMotionKind::Shape);
+    EXPECT_EQ(file.motionRelations[2].status, spice::mld::model::MldMotionRelationStatus::Unique);
+    ASSERT_EQ(file.animationBindings.size(), 2U);
+    EXPECT_EQ(file.animationBindings[0].motionAddress, 0x300U);
+    EXPECT_EQ(file.animationBindings[0].scope,
+        spice::mld::model::MldMotionRelationScope::SameEntryObjectList);
+    EXPECT_FALSE(file.animationBindings[0].shortRot);
+
+    const auto nodeMotion = file.motionResources.find(0x300U);
+    const auto cameraMotion = file.motionResources.find(0x340U);
+    const auto shapeMotion = file.motionResources.find(0x380U);
+    ASSERT_NE(nodeMotion, file.motionResources.end());
+    ASSERT_NE(cameraMotion, file.motionResources.end());
+    ASSERT_NE(shapeMotion, file.motionResources.end());
+    ASSERT_EQ(nodeMotion->second.variants.size(), 1U);
+    ASSERT_EQ(cameraMotion->second.variants.size(), 1U);
+    ASSERT_EQ(shapeMotion->second.variants.size(), 1U);
+    ASSERT_EQ(shapeMotion->second.variants[0].targetLayout.lanes.size(), 1U);
+    ASSERT_TRUE(shapeMotion->second.variants[0].targetLayout.lanes[0].vertex_count.has_value());
+    ASSERT_TRUE(shapeMotion->second.variants[0].targetLayout.lanes[0].normal_count.has_value());
+    EXPECT_EQ(*shapeMotion->second.variants[0].targetLayout.lanes[0].vertex_count, 3U);
+    EXPECT_EQ(*shapeMotion->second.variants[0].targetLayout.lanes[0].normal_count, 3U);
+    EXPECT_FALSE(nodeMotion->second.variants[0].shortRot);
+    EXPECT_EQ(nodeMotion->second.structure.status, Sa3Dport::File::NinjaMotionParseStatus::Complete);
+    EXPECT_TRUE(nodeMotion->second.structure.pof0_range.has_value());
+
+    const auto projected = parser.parse(bytes);
+    ASSERT_EQ(projected.animations.size(), 2U);
+    EXPECT_EQ(projected.animations[0].sourceMotionAddress, 0x300U);
+    ASSERT_TRUE(projected.blenderIrScene.has_value());
+    ASSERT_EQ(projected.blenderIrScene->animations.size(), 2U);
+    EXPECT_EQ(projected.blenderIrScene->animations[0].sourceMotionAddress, 0x300U);
+}
+
+TEST(MldParser, RetainsDuplicateCompatibleObjectSlotsAsAmbiguousCandidates) {
+    constexpr std::array<std::uint32_t, 2> objects{0x180U, 0x180U};
+    constexpr std::array motions{
+        std::pair<std::uint32_t, const char*>{0x300U, "NMDM"},
+    };
+    const auto file = MldParser{}.parseFile(makeWrappedObjectMldWithMotions(objects, motions));
+
+    ASSERT_EQ(file.motionRelations.size(), 1U);
+    const auto& relation = file.motionRelations[0];
+    EXPECT_EQ(relation.status, spice::mld::model::MldMotionRelationStatus::Ambiguous);
+    EXPECT_EQ(relation.scope, spice::mld::model::MldMotionRelationScope::SameEntryObjectList);
+    ASSERT_EQ(relation.targetCandidates.size(), 2U);
+    EXPECT_EQ(relation.targetCandidates[0].objectSlot, 0U);
+    EXPECT_EQ(relation.targetCandidates[1].objectSlot, 1U);
+    EXPECT_EQ(relation.targetCandidates[0].objectAddress, relation.targetCandidates[1].objectAddress);
+    ASSERT_TRUE(relation.targetCandidates[0].motionVariantIndex.has_value());
+    ASSERT_TRUE(relation.targetCandidates[1].motionVariantIndex.has_value());
+    EXPECT_EQ(relation.targetCandidates[0].motionVariantIndex, relation.targetCandidates[1].motionVariantIndex);
+    EXPECT_TRUE(file.animationBindings.empty());
+    ASSERT_EQ(file.motionResources.at(0x300U).variants.size(), 1U);
+}
+
+TEST(MldParser, DoesNotUseCompatibleObjectsFromAnotherEntry) {
+    constexpr std::array<std::uint32_t, 1> objects{0x180U};
+    constexpr std::array motions{
+        std::pair<std::uint32_t, const char*>{0x300U, "NMDM"},
+    };
+    auto bytes = makeWrappedObjectMldWithMotions(objects, motions);
+    bytes.resize(0x470U, 0U);
+    std::copy_n(bytes.begin() + static_cast<std::ptrdiff_t>(kEntryOffset), kEntrySize,
+        bytes.begin() + static_cast<std::ptrdiff_t>(kEntryOffset + kEntrySize));
+    writeU32(bytes, 0x00U, 2U, Endian::Big);
+
+    constexpr std::size_t kFirstObjects = 0x440U;
+    constexpr std::size_t kFirstMotions = 0x448U;
+    constexpr std::size_t kSecondObjects = 0x454U;
+    constexpr std::size_t kSecondMotions = 0x460U;
+    const std::array<std::uint32_t, 0> empty{};
+    writeList(bytes, kFirstObjects, empty, Endian::Big);
+    writeList(bytes, kFirstMotions, std::array<std::uint32_t, 1>{0x300U}, Endian::Big);
+    writeList(bytes, kSecondObjects, objects, Endian::Big);
+    writeList(bytes, kSecondMotions, empty, Endian::Big);
+    writeU32(bytes, kEntryOffset + 0x14U, static_cast<std::uint32_t>(kFirstObjects), Endian::Big);
+    writeU32(bytes, kEntryOffset + 0x1CU, static_cast<std::uint32_t>(kFirstMotions), Endian::Big);
+    const auto secondEntry = kEntryOffset + kEntrySize;
+    writeU32(bytes, secondEntry + 0x00U, 0x303U, Endian::Big);
+    writeU32(bytes, secondEntry + 0x14U, static_cast<std::uint32_t>(kSecondObjects), Endian::Big);
+    writeU32(bytes, secondEntry + 0x1CU, static_cast<std::uint32_t>(kSecondMotions), Endian::Big);
+
+    const auto file = MldParser{}.parseFile(bytes);
+    ASSERT_EQ(file.entries.size(), 2U);
+    ASSERT_EQ(file.motionRelations.size(), 1U);
+    const auto& relation = file.motionRelations[0];
+    EXPECT_EQ(relation.tableIndex, 0U);
+    EXPECT_EQ(relation.scope, spice::mld::model::MldMotionRelationScope::SameEntryObjectList);
+    EXPECT_EQ(relation.status, spice::mld::model::MldMotionRelationStatus::TargetUnavailable);
+    EXPECT_TRUE(relation.targetCandidates.empty());
+    EXPECT_TRUE(file.animationBindings.empty());
+    EXPECT_NE(file.objectResources.find(0x180U), file.objectResources.end());
+}
+
+TEST(MldParser, UsesStructuralOnlyScopeForUnknownMotionKinds) {
+    constexpr std::array<std::uint32_t, 1> objects{0x180U};
+    constexpr std::array motions{
+        std::pair<std::uint32_t, const char*>{0x300U, "ABCD"},
+    };
+    const auto file = MldParser{}.parseFile(makeWrappedObjectMldWithMotions(objects, motions));
+
+    ASSERT_EQ(file.motionRelations.size(), 1U);
+    EXPECT_EQ(file.motionRelations[0].motionKind, Sa3Dport::File::NinjaMotionKind::Unknown);
+    EXPECT_EQ(file.motionRelations[0].scope, spice::mld::model::MldMotionRelationScope::StructuralOnly);
+    EXPECT_EQ(file.motionRelations[0].status,
+        spice::mld::model::MldMotionRelationStatus::NoCompatibleTarget);
+    EXPECT_TRUE(file.motionRelations[0].targetCandidates.empty());
+    EXPECT_TRUE(file.animationBindings.empty());
+}
+
+TEST(Sa3dBlenderIrBuilder, ProjectsNcamPositionAndTargetUnderOwningEntry) {
+    spice::mld::parsing::ParseResult parsed{};
+    parsed.coordinatePolicy.swapYZ = true;
+    parsed.coordinatePolicy.negateX = true;
+    parsed.coordinatePolicy.uniformScale = 2.0F;
+    spice::mld::parsing::ParsedRawEntry entry{};
+    entry.sourceEntryId = 12U;
+    entry.tableIndex = 7U;
+    parsed.rawEntries.push_back(entry);
+
+    auto motion = std::make_shared<Sa3Dport::Animation::Motion>();
+    motion->declared_frame_count = 20U;
+    motion->interpolation_mode = Sa3Dport::Animation::InterpolationMode::Linear;
+    motion->keyframes[0U].position.emplace(3U, Sa3Dport::Structs::Vector3{1.0F, 2.0F, 3.0F});
+    motion->keyframes[0U].target.emplace(5U, Sa3Dport::Structs::Vector3{4.0F, 5.0F, 6.0F});
+    motion->keyframes[0U].roll.emplace(5U, 0.25F);
+    parsed.cameraMotions.push_back(spice::mld::parsing::ParsedMldCameraMotion{
+        .sourceEntryId = 12U,
+        .tableIndex = 7U,
+        .sourceMotionAddress = 0x340U,
+        .motionSlot = 2U,
+        .motion = motion,
+    });
+
+    const auto scene = spice::mld::parsing::Sa3dBlenderIrBuilder{}.build(parsed);
+    ASSERT_EQ(scene.indexEntries.size(), 1U);
+    ASSERT_EQ(scene.indexEntries[0].cameraMotions.size(), 1U);
+    const auto& camera = scene.indexEntries[0].cameraMotions[0];
+    EXPECT_EQ(camera.sourceMotionAddress, 0x340U);
+    EXPECT_EQ(camera.motionSlot, 2U);
+    EXPECT_EQ(camera.frameCount, 20U);
+    EXPECT_EQ(camera.interpolationMode, "linear");
+    ASSERT_EQ(camera.position.size(), 1U);
+    EXPECT_EQ(camera.position[0].frame, 3U);
+    EXPECT_FLOAT_EQ(camera.position[0].value.x, -2.0F);
+    EXPECT_FLOAT_EQ(camera.position[0].value.y, 6.0F);
+    EXPECT_FLOAT_EQ(camera.position[0].value.z, 4.0F);
+    ASSERT_EQ(camera.target.size(), 1U);
+    EXPECT_FLOAT_EQ(camera.target[0].value.x, -8.0F);
+    EXPECT_FLOAT_EQ(camera.target[0].value.y, 12.0F);
+    EXPECT_FLOAT_EQ(camera.target[0].value.z, 10.0F);
+    ASSERT_EQ(camera.unsupportedChannels.size(), 1U);
+    EXPECT_EQ(camera.unsupportedChannels[0].channel, "roll");
+    EXPECT_TRUE(scene.animations.empty());
+
+    const auto json = spice::mld::exporting::BlenderIrJsonExporter{}.toJson(scene);
+    EXPECT_NE(json.find("\"cameraMotions\":[{\"sourceMotionAddress\":832,\"motionSlot\":2"), std::string::npos);
+    EXPECT_NE(json.find("\"position\":[{\"frame\":3,\"value\":[-2,6,4]}]"), std::string::npos);
+    EXPECT_NE(json.find("\"target\":[{\"frame\":5,\"value\":[-8,12,10]}]"), std::string::npos);
+}
+
+TEST(Sa3dBlenderIrBuilder, OmitsNcamWithoutBothSpatialChannels) {
+    spice::mld::parsing::ParseResult parsed{};
+    spice::mld::parsing::ParsedRawEntry entry{};
+    entry.sourceEntryId = 12U;
+    entry.tableIndex = 7U;
+    parsed.rawEntries.push_back(entry);
+
+    auto motion = std::make_shared<Sa3Dport::Animation::Motion>();
+    motion->keyframes[0U].position.emplace(0U, Sa3Dport::Structs::Vector3{1.0F, 2.0F, 3.0F});
+    parsed.cameraMotions.push_back(spice::mld::parsing::ParsedMldCameraMotion{
+        .sourceEntryId = 12U,
+        .tableIndex = 7U,
+        .sourceMotionAddress = 0x340U,
+        .motionSlot = 2U,
+        .motion = motion,
+    });
+
+    const auto scene = spice::mld::parsing::Sa3dBlenderIrBuilder{}.build(parsed);
+    ASSERT_EQ(scene.indexEntries.size(), 1U);
+    EXPECT_TRUE(scene.indexEntries[0].cameraMotions.empty());
+    EXPECT_TRUE(std::any_of(scene.diagnostics.begin(), scene.diagnostics.end(), [](const auto& message) {
+        return message.find("NCAM at 0x00000340") != std::string::npos &&
+            message.find("position or target") != std::string::npos;
+    }));
+}
+
+TEST(MldParser, ProjectsType56AsNodeAuxiliaryGeometryOnly) {
+    constexpr std::size_t kPolyChunkOffset = 0x288U;
+    auto bytes = makeWrappedObjectMldWithTriangleGeometry();
+    writeU16(bytes, kPolyChunkOffset + 0x00U, 0x0038U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x02U, 5U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x04U, 0x4001U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x06U, 0U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x08U, 1U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x0AU, 2U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x0CU, 0xBEEFU, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x0EU, 0x00FFU, Endian::Little);
+
+    const auto parsed = MldParser{}.parse(bytes);
+    ASSERT_TRUE(parsed.blenderIrScene.has_value());
+    const auto& scene = *parsed.blenderIrScene;
+    ASSERT_EQ(scene.objectTrees.size(), 1U);
+    ASSERT_EQ(scene.objectTrees[0].nodes.size(), 1U);
+    ASSERT_EQ(scene.objectTrees[0].nodes[0].auxiliaryGeometry.size(), 1U);
+    const auto& auxiliary = scene.objectTrees[0].nodes[0].auxiliaryGeometry[0];
+    EXPECT_EQ(auxiliary.role, spice::mld::model::BlenderIrAuxiliaryGeometryRole::Type56ShadowVolume);
+    EXPECT_EQ(auxiliary.sourceChunkType, 56U);
+    EXPECT_FALSE(auxiliary.fromCacheReplay);
+    ASSERT_EQ(auxiliary.vertices.size(), 3U);
+    ASSERT_EQ(auxiliary.triangles.size(), 1U);
+    EXPECT_EQ(auxiliary.triangles[0].sourceIndices,
+        (std::array<std::uint16_t, 3>{0U, 1U, 2U}));
+    EXPECT_EQ(auxiliary.triangles[0].userWords, (std::vector<std::uint16_t>{0xBEEFU}));
+    EXPECT_TRUE(scene.meshes.empty());
+
+    const auto json = spice::mld::exporting::BlenderIrJsonExporter{}.toJson(scene);
+    EXPECT_NE(json.find("\"role\":\"type56ShadowVolume\""), std::string::npos);
+    EXPECT_NE(json.find("\"sourceIndices\":[0,1,2]"), std::string::npos);
+}
+
+TEST(MldParser, MarksType56DrawListProjectionAsCacheReplay) {
+    constexpr std::size_t kPolyChunkOffset = 0x288U;
+    auto bytes = makeWrappedObjectMldWithTriangleGeometry();
+    writeU16(bytes, kPolyChunkOffset + 0x00U, 0x0004U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x02U, 0x0038U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x04U, 4U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x06U, 1U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x08U, 0U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x0AU, 1U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x0CU, 2U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x0EU, 0x0005U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x10U, 0x00FFU, Endian::Little);
+
+    const auto parsed = MldParser{}.parse(bytes);
+    ASSERT_TRUE(parsed.blenderIrScene.has_value());
+    const auto& scene = *parsed.blenderIrScene;
+    ASSERT_EQ(scene.objectTrees.size(), 1U);
+    ASSERT_EQ(scene.objectTrees[0].nodes[0].auxiliaryGeometry.size(), 1U);
+    const auto& auxiliary = scene.objectTrees[0].nodes[0].auxiliaryGeometry[0];
+    EXPECT_TRUE(auxiliary.fromCacheReplay);
+    EXPECT_EQ(auxiliary.sourceChunkOffset, kPolyChunkOffset + 2U);
+    EXPECT_EQ(auxiliary.triangles.size(), 1U);
+}
+
+TEST(MldParser, KeepsType57AndType58OutOfAuxiliaryBlenderGeometry) {
+    constexpr std::size_t kPolyChunkOffset = 0x288U;
+    for (const auto type : {0x0039U, 0x003AU}) {
+        auto bytes = makeWrappedObjectMldWithTriangleGeometry();
+        writeU16(bytes, kPolyChunkOffset + 0x00U, static_cast<std::uint16_t>(type), Endian::Little);
+        writeU16(bytes, kPolyChunkOffset + 0x02U, 5U, Endian::Little);
+        writeU16(bytes, kPolyChunkOffset + 0x04U, 1U, Endian::Little);
+        if (type == 0x0039U) {
+            writeU16(bytes, kPolyChunkOffset + 0x06U, 0U, Endian::Little);
+            writeU16(bytes, kPolyChunkOffset + 0x08U, 1U, Endian::Little);
+            writeU16(bytes, kPolyChunkOffset + 0x0AU, 2U, Endian::Little);
+            writeU16(bytes, kPolyChunkOffset + 0x0CU, 3U, Endian::Little);
+        } else {
+            writeU16(bytes, kPolyChunkOffset + 0x06U, 3U, Endian::Little);
+            writeU16(bytes, kPolyChunkOffset + 0x08U, 0U, Endian::Little);
+            writeU16(bytes, kPolyChunkOffset + 0x0AU, 1U, Endian::Little);
+            writeU16(bytes, kPolyChunkOffset + 0x0CU, 2U, Endian::Little);
+        }
+        writeU16(bytes, kPolyChunkOffset + 0x0EU, 0x00FFU, Endian::Little);
+
+        const auto parsed = MldParser{}.parse(bytes);
+        ASSERT_TRUE(parsed.blenderIrScene.has_value());
+        ASSERT_EQ(parsed.blenderIrScene->objectTrees.size(), 1U);
+        EXPECT_TRUE(parsed.blenderIrScene->objectTrees[0].nodes[0].auxiliaryGeometry.empty());
+    }
+}
+
+TEST(MldParser, RejectsOnlyUnresolvedType56PrimitivesWithoutZeroSubstitution) {
+    constexpr std::size_t kPolyChunkOffset = 0x288U;
+    auto bytes = makeWrappedObjectMldWithTriangleGeometry();
+    writeU16(bytes, kPolyChunkOffset + 0x00U, 0x0038U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x02U, 4U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x04U, 1U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x06U, 0U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x08U, 1U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x0AU, 9U, Endian::Little);
+    writeU16(bytes, kPolyChunkOffset + 0x0CU, 0x00FFU, Endian::Little);
+
+    const auto parsed = MldParser{}.parse(bytes);
+    ASSERT_TRUE(parsed.blenderIrScene.has_value());
+    const auto& scene = *parsed.blenderIrScene;
+    ASSERT_EQ(scene.objectTrees.size(), 1U);
+    ASSERT_EQ(scene.objectTrees[0].nodes.size(), 1U);
+    EXPECT_TRUE(scene.objectTrees[0].nodes[0].auxiliaryGeometry.empty());
+    EXPECT_TRUE(std::any_of(scene.diagnostics.begin(), scene.diagnostics.end(), [](const auto& message) {
+        return message.find("Type-56 projection omitted unresolved primitive") != std::string::npos &&
+            message.find("chunk 0x00000288") != std::string::npos &&
+            message.find("cache indices=9") != std::string::npos;
+    }));
+}
+
+TEST(MldParser, PreservesDuplicateMotionSlotsAndSharesTheirDecodedVariant) {
+    constexpr std::array<std::uint32_t, 1> objects{0x180U};
+    constexpr std::array motions{
+        std::pair<std::uint32_t, const char*>{0x300U, "NMDM"},
+        std::pair<std::uint32_t, const char*>{0x300U, "NMDM"},
+    };
+    const auto file = MldParser{}.parseFile(makeWrappedObjectMldWithMotions(objects, motions));
+
+    ASSERT_EQ(file.motionRelations.size(), 2U);
+    EXPECT_EQ(file.motionRelations[0].motionSlot, 0U);
+    EXPECT_EQ(file.motionRelations[1].motionSlot, 1U);
+    EXPECT_EQ(file.motionRelations[0].motionAddress, file.motionRelations[1].motionAddress);
+    EXPECT_EQ(file.motionRelations[0].status, spice::mld::model::MldMotionRelationStatus::Unique);
+    EXPECT_EQ(file.motionRelations[1].status, spice::mld::model::MldMotionRelationStatus::Unique);
+    ASSERT_EQ(file.motionRelations[0].targetCandidates.size(), 1U);
+    ASSERT_EQ(file.motionRelations[1].targetCandidates.size(), 1U);
+    EXPECT_EQ(
+        file.motionRelations[0].targetCandidates[0].motionVariantIndex,
+        file.motionRelations[1].targetCandidates[0].motionVariantIndex);
+    ASSERT_EQ(file.animationBindings.size(), 2U);
+    EXPECT_EQ(file.animationBindings[0].motionSlot, 0U);
+    EXPECT_EQ(file.animationBindings[1].motionSlot, 1U);
+    ASSERT_EQ(file.motionResources.at(0x300U).variants.size(), 1U);
+}
+
+TEST(MldParser, FiltersNoAnimateNodesButRetainsFullTreeIndicesInMotionLanes) {
+    constexpr std::uint32_t modelBlockOffset = 0x1C0U;
+    constexpr std::uint32_t rootNodeOffset = modelBlockOffset + 0x08U;
+    constexpr std::uint32_t childRelativeOffset = 0x110U;
+    constexpr std::uint32_t childNodeOffset = modelBlockOffset + childRelativeOffset;
+    constexpr std::array<std::uint32_t, 1> objects{0x180U};
+    constexpr std::array motions{
+        std::pair<std::uint32_t, const char*>{0x400U, "NMDM"},
+    };
+    auto bytes = makeWrappedObjectMldWithMotions(objects, motions);
+    writeU32(bytes, modelBlockOffset + 4U, 0x160U, Endian::Little);
+    writeU32(bytes, rootNodeOffset, 1U << 6U, Endian::Little);
+    writeSa3dPointer(bytes, rootNodeOffset + 0x2CU, childRelativeOffset);
+    writeU32(bytes, childNodeOffset, 0U, Endian::Little);
+    writeU32(bytes, childNodeOffset + 4U, 0U, Endian::Little);
+    writeF32(bytes, childNodeOffset + 0x20U, 1.0F, Endian::Little);
+    writeF32(bytes, childNodeOffset + 0x24U, 1.0F, Endian::Little);
+    writeF32(bytes, childNodeOffset + 0x28U, 1.0F, Endian::Little);
+    writeU32(bytes, childNodeOffset + 0x2CU, 0U, Endian::Little);
+    writeU32(bytes, childNodeOffset + 0x30U, 0U, Endian::Little);
+
+    const auto file = MldParser{}.parseFile(bytes);
+    ASSERT_EQ(file.motionRelations.size(), 1U);
+    ASSERT_EQ(file.motionRelations[0].targetCandidates.size(), 1U);
+    ASSERT_TRUE(file.motionRelations[0].targetCandidates[0].motionVariantIndex.has_value());
+    const auto& variant = file.motionResources.at(0x400U).variants.at(
+        *file.motionRelations[0].targetCandidates[0].motionVariantIndex);
+    ASSERT_EQ(variant.targetLayout.lanes.size(), 1U);
+    EXPECT_EQ(variant.targetLayout.lanes[0].node_index, 1U);
+    EXPECT_EQ(variant.nodeCount, 1U);
+}
+
+TEST(MldParser, RecordsUnavailableSameEntryObjectWithoutGuessingTarget) {
+    constexpr std::array<std::uint32_t, 1> objects{0x2F0U};
+    constexpr std::array motions{
+        std::pair<std::uint32_t, const char*>{0x300U, "NMDM"},
+    };
+    const auto file = MldParser{}.parseFile(makeWrappedObjectMldWithMotions(objects, motions));
+
+    ASSERT_EQ(file.motionRelations.size(), 1U);
+    const auto& relation = file.motionRelations[0];
+    EXPECT_EQ(relation.status, spice::mld::model::MldMotionRelationStatus::TargetUnavailable);
+    ASSERT_EQ(relation.targetCandidates.size(), 1U);
+    EXPECT_EQ(relation.targetCandidates[0].objectSlot, 0U);
+    EXPECT_FALSE(relation.targetCandidates[0].targetAvailable);
+    EXPECT_FALSE(relation.targetCandidates[0].diagnostic.empty());
+    EXPECT_TRUE(file.animationBindings.empty());
+}
+
+TEST(MldParser, MarksShapeTargetUnavailableWhenItsAttachRepresentationIsUnsupported) {
+    constexpr std::array<std::uint32_t, 1> objects{0x180U};
+    constexpr std::array motions{
+        std::pair<std::uint32_t, const char*>{0x300U, "NSSM"},
+    };
+    auto bytes = makeWrappedObjectMldWithMotions(objects, motions);
+    writeTag(bytes, 0x1C0U, "NJBM");
+    const auto file = MldParser{}.parseFile(bytes);
+
+    ASSERT_EQ(file.motionRelations.size(), 1U);
+    const auto& relation = file.motionRelations[0];
+    EXPECT_EQ(relation.motionKind, Sa3Dport::File::NinjaMotionKind::Shape);
+    EXPECT_EQ(relation.status, spice::mld::model::MldMotionRelationStatus::TargetUnavailable);
+    ASSERT_EQ(relation.targetCandidates.size(), 1U);
+    EXPECT_FALSE(relation.targetCandidates[0].targetAvailable);
+    EXPECT_NE(relation.targetCandidates[0].diagnostic.find("supported representation"),
+        std::string::npos);
+    EXPECT_TRUE(file.animationBindings.empty());
 }
 
 TEST(BlenderIrJsonExporter, EmitsWeightedMeshBinding) {
