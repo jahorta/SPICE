@@ -52,13 +52,13 @@ std::size_t expressionCount(const spice::sct::SctParseResult& parseResult)
     return count;
 }
 
-std::size_t astCount(const spice::sct::SctParseResult& parseResult)
+std::size_t programCount(const spice::sct::SctParseResult& parseResult)
 {
     std::size_t count = 0;
     for (const auto& section : parseResult.file.sections) {
         for (const auto& instruction : section.instructions) {
             for (const auto& parameter : instruction.parameters) {
-                if (parameter.expression.has_value() && parameter.expression->ast.has_value()) {
+                if (parameter.expression.has_value() && parameter.expression->program.has_value()) {
                     ++count;
                 }
             }
@@ -67,28 +67,16 @@ std::size_t astCount(const spice::sct::SctParseResult& parseResult)
     return count;
 }
 
-bool hasAstKind(const spice::sct::SctScptAstNode& node, spice::sct::SctScptAstNodeKind kind)
-{
-    if (node.kind == kind) {
-        return true;
-    }
-    for (const auto& child : node.children) {
-        if (hasAstKind(child, kind)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool hasAstKind(const spice::sct::SctParseResult& parseResult, spice::sct::SctScptAstNodeKind kind)
+bool hasValueKind(const spice::sct::SctParseResult& parseResult, spice::sct::SctScptValueKind kind)
 {
     for (const auto& section : parseResult.file.sections) {
         for (const auto& instruction : section.instructions) {
             for (const auto& parameter : instruction.parameters) {
-                if (parameter.expression.has_value()
-                    && parameter.expression->ast.has_value()
-                    && hasAstKind(*parameter.expression->ast, kind)) {
-                    return true;
+                if (parameter.expression && parameter.expression->program) {
+                    for (const auto& operation : parameter.expression->program->operations) {
+                        const auto* value = std::get_if<spice::sct::SctScptValueOperation>(&operation);
+                        if (value && value->kind == kind) return true;
+                    }
                 }
             }
         }
@@ -148,7 +136,7 @@ std::string documentDiagnosticMessages(const std::vector<spice::sct::SctDocument
 
 } // namespace
 
-TEST(SctRealFixtures, Me017bParsesAndBuildsScptAst)
+TEST(SctRealFixtures, Me017bParsesAndBuildsScptPrograms)
 {
     const auto fixture = findSctFixture("me017b.sct");
     if (fixture.empty()) {
@@ -161,11 +149,10 @@ TEST(SctRealFixtures, Me017bParsesAndBuildsScptAst)
     EXPECT_GT(parsed.file.sections.size(), 100u);
     EXPECT_GT(instructionCount(parsed), 100u);
     EXPECT_GT(expressionCount(parsed), 100u);
-    EXPECT_GT(astCount(parsed), 100u);
-    EXPECT_TRUE(hasAstKind(parsed, spice::sct::SctScptAstNodeKind::FloatLiteral));
-    EXPECT_TRUE(hasAstKind(parsed, spice::sct::SctScptAstNodeKind::IntVariable));
-    EXPECT_TRUE(hasAstKind(parsed, spice::sct::SctScptAstNodeKind::BitVariable));
-    EXPECT_TRUE(hasAstKind(parsed, spice::sct::SctScptAstNodeKind::CompareOp));
+    EXPECT_GT(programCount(parsed), 100u);
+    EXPECT_TRUE(hasValueKind(parsed, spice::sct::SctScptValueKind::FloatLiteral));
+    EXPECT_TRUE(hasValueKind(parsed, spice::sct::SctScptValueKind::DirectIntVariable));
+    EXPECT_TRUE(hasValueKind(parsed, spice::sct::SctScptValueKind::BitVariable));
 }
 
 TEST(SctRealFixtures, Me017bPreserveModeIsByteIdentical)
@@ -218,7 +205,7 @@ TEST(SctRealFixtures, Me017bImportsDeterministicCanonicalDocumentWithCompleteCov
             const auto count = [&](const auto& parameters) {
                 for (const auto& parameter : parameters) {
                     const auto* expression = std::get_if<spice::sct::SctCanonicalExpression>(&parameter.value);
-                    if (expression && std::holds_alternative<spice::sct::SctCanonicalExpressionNode>(expression->root)) {
+                    if (expression && std::holds_alternative<spice::sct::SctTypedScptProgram>(expression->body)) {
                         ++typedExpressions;
                     }
                 }
