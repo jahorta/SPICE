@@ -228,10 +228,10 @@ TEST(SctRealFixtures, Me017bImportsDeterministicCanonicalDocumentWithCompleteCov
         }
     }
     EXPECT_GT(typedExpressions, 100u);
-    const auto evidence = first.context.bind(first.context.revisionProvenance);
+    const auto evidence = first.context.bind(first.context.revisionProvenance());
     ASSERT_TRUE(evidence);
 
-    EXPECT_TRUE(first.context.receipt.sourceMap.hasCompleteLeafCoverage());
+    EXPECT_TRUE(first.context.receipt().sourceMap.hasCompleteLeafCoverage());
     EXPECT_TRUE(std::none_of(first.document->opaqueAttachments.begin(), first.document->opaqueAttachments.end(),
         [&](const auto& attachment) {
             return attachment.fixedOffset == 0 && attachment.bytes.size() == parsed.file.originalPayloadBytes.size();
@@ -254,7 +254,7 @@ TEST(SctRealFixtures, Me004aCarriesGameCubeOnlyOpcode265)
     const auto imported = spice::sct::SctDocumentImporter::import(parsed,
         {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
     ASSERT_TRUE(imported.document.has_value());
-    const auto evidence = imported.context.bind(imported.context.revisionProvenance);
+    const auto evidence = imported.context.bind(imported.context.revisionProvenance());
     ASSERT_TRUE(evidence);
 
     const auto [opcode265Count, typedReferenceCount] = opcode265ReferenceCounts(*imported.document);
@@ -288,7 +288,7 @@ TEST(SctRealFixtures, Me017bStrictDocumentExportPreservesOpaqueBytesAndReimports
     const auto imported = spice::sct::SctDocumentImporter::import(parsed,
         {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
     ASSERT_TRUE(imported.document.has_value());
-    const auto evidence = imported.context.bind(imported.context.revisionProvenance);
+    const auto evidence = imported.context.bind(imported.context.revisionProvenance());
     ASSERT_TRUE(evidence);
 
     const spice::sct::SctDocumentExportOptions options{
@@ -339,7 +339,7 @@ TEST(SctRealFixtures, Me004aStrictExportAcceptsGameCubeAndRejectsDreamcast)
     const auto imported = spice::sct::SctDocumentImporter::import(parsed,
         {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
     ASSERT_TRUE(imported.document.has_value());
-    const auto evidence = imported.context.bind(imported.context.revisionProvenance);
+    const auto evidence = imported.context.bind(imported.context.revisionProvenance());
     ASSERT_TRUE(evidence);
     spice::sct::SctDocumentExportOptions options{
         spice::sct::SctPlatform::GameCube,
