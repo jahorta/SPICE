@@ -152,7 +152,8 @@ TEST(SctRealFixtures, Me017bParsesAndBuildsScptPrograms)
     EXPECT_GT(expressionCount(parsed), 100u);
     EXPECT_GT(programCount(parsed), 100u);
     EXPECT_TRUE(hasValueKind(parsed, spice::sct::SctScptValueKind::FloatLiteral));
-    EXPECT_TRUE(hasValueKind(parsed, spice::sct::SctScptValueKind::DirectIntVariable));
+    EXPECT_TRUE(hasValueKind(parsed,
+        spice::sct::SctScptValueKind::FloatBackedIntegerVariable));
     EXPECT_TRUE(hasValueKind(parsed, spice::sct::SctScptValueKind::BitVariable));
 }
 
