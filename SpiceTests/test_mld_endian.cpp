@@ -5,6 +5,7 @@
 #include "../SpicePvm/SpicePvm.h"
 #include "../Compression/Aklz.h"
 #include "../Sa3Dport/Sa3Dport.h"
+#include "MldCorpusTestSupport.h"
 
 #include <gtest/gtest.h>
 
@@ -1560,6 +1561,10 @@ TEST(MldDreamcastTextureArchive, RejectsInvalidOrCrossPlatformEncodedTextureByte
 }
 
 TEST(MldDreamcastTextureCorpus, ParsesAndNoEditWritesRegionalMldArchivesReadOnly) {
+    if (!spice::tests::corpusTestsEnabled()) {
+        GTEST_SKIP() << spice::tests::kCorpusTestsOptInMessage;
+    }
+
     const std::array roots{
         std::filesystem::path{R"(D:\SoADC\SoA(Eu)Disc1Assets)"},
         std::filesystem::path{R"(D:\SoADC\SoA(Usa)Disc1Assets)"},

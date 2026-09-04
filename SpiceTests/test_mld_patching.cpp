@@ -2,6 +2,7 @@
 #include "../SpiceMLD/Parsing/GobjParser.h"
 #include "../SpiceMLD/Parsing/GrndParser.h"
 #include "../Compression/Aklz.h"
+#include "MldCorpusTestSupport.h"
 
 #include <gtest/gtest.h>
 
@@ -742,6 +743,10 @@ TEST(MldPatching, RejectsStaleProvenanceAfterSemanticModelEdits) {
 }
 
 TEST(MldGroundMetadataCorpus, MatchesGameCubeAndDreamcastResearchInventories) {
+    if (!spice::tests::corpusTestsEnabled()) {
+        GTEST_SKIP() << spice::tests::kCorpusTestsOptInMessage;
+    }
+
     const std::vector<std::filesystem::path> gameCubeRoots{
         R"(D:\SoAGC\2002-12-19-gc-us-final_Skies_of_Arcadia_Legends\field)",
     };
@@ -775,6 +780,10 @@ TEST(MldGroundMetadataCorpus, MatchesGameCubeAndDreamcastResearchInventories) {
 }
 
 TEST(MldPatchingCorpus, ResolvesRealDreamcastGrndAndGobjPatchOffsets) {
+    if (!spice::tests::corpusTestsEnabled()) {
+        GTEST_SKIP() << spice::tests::kCorpusTestsOptInMessage;
+    }
+
     const std::array roots{
         std::filesystem::path{ R"(D:\SoADC\SoA(Eu)Disc1Assets\FIELD)" },
         std::filesystem::path{ R"(D:\SoADC\SoA(Usa)Disc1Assets\FIELD)" },
