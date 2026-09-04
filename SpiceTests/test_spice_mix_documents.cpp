@@ -179,7 +179,7 @@ void addDetailedEntryLists(std::vector<std::uint8_t>& bytes, const bool littleEn
 
 std::vector<std::uint8_t> makeSmlPairMember(const std::span<const std::uint8_t> embeddedMld) {
     std::vector<std::uint8_t> bytes(0x20U + embeddedMld.size(), 0U);
-    writeU32Be(bytes, 0x00U, 0x534D4C30U);
+    writeU32Be(bytes, 0x00U, 0x0001FFFFU);
     writeU32Be(bytes, 0x04U, 0x0001FFFFU);
     writeU32Be(bytes, 0x08U, 0x00000100U);
     writeU32Be(bytes, 0x0CU, 0x20U);
@@ -191,7 +191,7 @@ std::vector<std::uint8_t> makeSmlPairMember(const std::span<const std::uint8_t> 
 
 std::vector<std::uint8_t> makeSstPairMember() {
     std::vector<std::uint8_t> bytes(0x60U, 0U);
-    writeU32Be(bytes, 0x00U, 0xAAA00000U);
+    writeU32Be(bytes, 0x00U, 0x0001FFFFU);
     writeU32Be(bytes, 0x04U, 0x0001FFFFU);
     writeU32Be(bytes, 0x08U, 0xBBBB0000U);
     writeU32Be(bytes, 0x0CU, 0x20U);
@@ -845,7 +845,7 @@ TEST(SpiceMixDocuments, SstSmlSessionResolvesPairAndProjectsNestedInspection) {
     EXPECT_TRUE(overview.recordCountsAgree);
     EXPECT_EQ(overview.smlEndian, "Big endian");
     EXPECT_EQ(overview.sstEndian, "Big endian");
-    EXPECT_EQ(overview.platformContext, "GameCube");
+    EXPECT_EQ(overview.platformContext, "Big-endian convention");
     EXPECT_EQ(overview.embeddedMldParsedCount, 1U);
     EXPECT_EQ(overview.embeddedMldFailedCount, 0U);
     ASSERT_EQ(opened.session->sourcePaths().size(), 2U);
