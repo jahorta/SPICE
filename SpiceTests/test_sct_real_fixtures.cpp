@@ -193,7 +193,7 @@ TEST(SctRealFixtures, Me017bImportsDeterministicCanonicalDocumentWithCompleteCov
     ASSERT_TRUE(second.document.has_value());
     EXPECT_EQ(first.document->sections.size(), second.document->sections.size());
     EXPECT_EQ(documentStringCount(*first.document), documentStringCount(*second.document));
-    EXPECT_EQ(first.document->footerEntries.size(), second.document->footerEntries.size());
+    EXPECT_EQ(first.document->supplementaryText.size(), second.document->supplementaryText.size());
     EXPECT_EQ(first.document->opaqueAttachments.size(), second.document->opaqueAttachments.size());
     ASSERT_FALSE(first.document->sections.empty());
     EXPECT_EQ(first.document->sections.front().id, second.document->sections.front().id);
@@ -314,7 +314,7 @@ TEST(SctRealFixtures, Me017bStrictDocumentExportPreservesOpaqueBytesAndReimports
     EXPECT_EQ(reimported.document->sections.size(), imported.document->sections.size());
     EXPECT_EQ(documentInstructionCount(*reimported.document), documentInstructionCount(*imported.document));
     EXPECT_EQ(documentStringCount(*reimported.document), documentStringCount(*imported.document));
-    EXPECT_EQ(reimported.document->footerEntries.size(), imported.document->footerEntries.size());
+    EXPECT_EQ(reimported.document->supplementaryText.size(), imported.document->supplementaryText.size());
 }
 
 TEST(SctRealFixtures, Me004aStrictExportAcceptsGameCubeAndRejectsDreamcast)
