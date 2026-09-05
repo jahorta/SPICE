@@ -57,16 +57,16 @@ Support varies by format. Some formats have semantic editors and writers, while 
 | ---------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | AKLZ             | `Compression` | Compresses and decompresses the wrapper used by many GameCube assets.                                                              |
 | `.bin`           | `SpiceBin`    | Provides endian-aware read-only probing for known indexed HRS/UI families; `.bin` is not treated as one universal format.          |
-| `.ect`           | `SpiceEct`    | Parses, edits, and writes Dreamcast and GameCube encounter tables through a platform-neutral model.                                |
+| `.ect`           | `SpiceEct`    | **Import: yes. Edit: yes. Write: yes.** Dreamcast and GameCube encounter tables share one platform-neutral model.                  |
 | `.gvm` / `.gvr`  | `SpiceGvm`    | Parses GVM archives and decodes, creates, or edits GVR textures with PNG interchange.                                              |
-| `.mld`           | `SpiceMLD`    | Imports GameCube and Dreamcast containers into a platform-neutral `MldDocument`, validates edits, writes explicit targets, and projects Blender IR. |
+| `.mld`           | `SpiceMLD`    | **Import: yes. Edit: MLD-owned content. Write: supported targets.** Embedded `SpiceModeling` documents remain read-only; Blender IR is a one-way projection. |
 | `.mlk`           | `SpiceMlk`    | Provides endian-aware read-only battle-resource inspection, corpus reports, and embedded-MLD Blender IR exports.                   |
 | `.mll`           | `SpiceMll`    | Parses big- and little-endian member archives and conservatively rebuilds them in their source endian.                             |
 | `.pvm` / `.pvr`  | `SpicePvm`    | Parses, decodes, and encodes Dreamcast texture archives and textures.                                                              |
-| `.sct`           | `SpiceSCT`    | Parses scripts and canonically rebuilds known structures; opcode semantics remain incomplete.                                      |
-| `.sml` / `.sst`  | `SpiceSstSml` | Provides endian-aware read-only parsing and research exports for paired GameCube and Dreamcast battle-stage files.                 |
-| `.std`           | `SpiceStd`    | Parses big- and little-endian battle action and entry tables and rewrites fields in the source endian.                            |
-| ALX 5.0.0 `.csv` | `SpiceTrade`  | Atomically imports 15 whitelisted ALX tables into typed, editable semantic models with stable identities and derived views.        |
+| `.sct`           | `SpiceSCT`    | **Import: yes. Edit: yes. Write: yes.** Canonical and preserving export paths are available while some opcode semantics remain incomplete. |
+| `.sml` / `.sst`  | `SpiceSstSml` | **Import: yes. In-memory mutation: yes. Paired write: no.** Validation, analysis, and secondary materialization do not constitute container persistence. |
+| `.std`           | `SpiceStd`    | **Import: yes. Edit: yes. Write: yes.** Either byte order and raw or AKLZ output are supported, subject to documented opaque-content restrictions. |
+| ALX 5.0.0 `.csv` | `SpiceTrade`  | **Import: yes. Edit: yes. Write: no.** Fifteen whitelisted tables are published atomically as typed semantic models.                |
 
 ## Applications and supporting projects
 

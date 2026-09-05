@@ -1010,7 +1010,9 @@ TEST(SpiceStdJsonExporter, SeparatesReceiptFromSemanticDocument) {
     const auto imported = StdDocumentImporter::importBytes(makeActionRows(Endian::Little));
     ASSERT_TRUE(imported.ok());
     const auto json = StdJsonExporter{}.toJson(imported);
-    EXPECT_NE(json.find("spice_std_document_v5"), std::string::npos);
+    EXPECT_NE(json.find("\"schema\": \"spice_std_json_export\""), std::string::npos);
+    EXPECT_NE(json.find("\"schemaVersion\": 5"), std::string::npos);
+    EXPECT_EQ(json.find("spice_std_document_v5"), std::string::npos);
     EXPECT_NE(json.find("\"receipt\""), std::string::npos);
     EXPECT_NE(json.find("\"document\""), std::string::npos);
     EXPECT_NE(json.find("\"selectorCallbackIndex\""), std::string::npos);
@@ -1019,9 +1021,11 @@ TEST(SpiceStdJsonExporter, SeparatesReceiptFromSemanticDocument) {
     EXPECT_EQ(json.find("sourceBoundPayloads"), std::string::npos);
 }
 
-TEST(SpiceStdJsonExporter, EmitsStructuredModelAndLightPayloadsInV5) {
+TEST(SpiceStdJsonExporter, EmitsStructuredModelAndLightPayloadsInExportSchemaV5) {
     const auto putModelJson = StdJsonExporter{}.toJson(sampleTypedDocument(kStdPutModelCombinedType));
-    EXPECT_NE(putModelJson.find("spice_std_document_v5"), std::string::npos);
+    EXPECT_NE(putModelJson.find("\"schema\": \"spice_std_json_export\""), std::string::npos);
+    EXPECT_NE(putModelJson.find("\"schemaVersion\": 5"), std::string::npos);
+    EXPECT_EQ(putModelJson.find("spice_std_document_v5"), std::string::npos);
     EXPECT_NE(putModelJson.find("\"kind\":\"putModel\""), std::string::npos);
     EXPECT_NE(putModelJson.find("\"modelTimeline\""), std::string::npos);
     EXPECT_NE(putModelJson.find("\"rawTail192Hex\":\"897b\""), std::string::npos);

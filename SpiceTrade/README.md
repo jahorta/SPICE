@@ -2,6 +2,8 @@
 
 `SpiceTrade` is an import-only static library for typed interchange with CSVs produced by ALX 5.0.0. It fills selected editing gaps without taking ownership of game file formats already modeled by another SPICE project.
 
+**Capability:** Atomic import and in-memory editing of typed whitelisted tables are supported. CSV writing and publication are not supported.
+
 The hard-cut public surface imports exactly these tables:
 
 - `enemy.csv`
