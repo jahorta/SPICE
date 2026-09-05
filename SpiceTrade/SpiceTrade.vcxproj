@@ -97,6 +97,7 @@
   <ItemGroup>
     <ClInclude Include="AlxDerivedView.h" />
     <ClInclude Include="AlxImporter.h" />
+    <ClInclude Include="AlxSha256.h" />
     <ClInclude Include="AlxModel.h" />
     <ClInclude Include="CsvModel.h" />
     <ClInclude Include="CsvReader.h" />
@@ -105,6 +106,7 @@
   <ItemGroup>
     <ClCompile Include="AlxDerivedView.cpp" />
     <ClCompile Include="AlxImporter.cpp" />
+    <ClCompile Include="AlxSha256.cpp" />
     <ClCompile Include="AlxModel.cpp" />
     <ClCompile Include="CsvModel.cpp" />
     <ClCompile Include="CsvReader.cpp" />

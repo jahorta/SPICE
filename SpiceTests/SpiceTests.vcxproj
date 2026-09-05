@@ -111,12 +111,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="MldCorpusTestSupport.h" />
+    <ClInclude Include="CorpusTestSupport.h" />
     <ClCompile Include="..\third-party\googletest-1.17.0\googletest\src\gtest-all.cc" />
     <ClCompile Include="run_tests.cpp" />
     <ClCompile Include="test_aklz.cpp" />
     <ClCompile Include="test_bin_parser.cpp" />
     <ClCompile Include="test_content_graph.cpp" />
+    <ClCompile Include="test_corpus_test_support.cpp" />
     <ClCompile Include="test_ect_parser.cpp" />
     <ClCompile Include="test_endian_migration.cpp" />
     <ClCompile Include="test_gvr_image_ir.cpp" />

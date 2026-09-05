@@ -1,16 +1,33 @@
 #include "../SpiceSCT/SpiceSCT.h"
 #include "../Compression/Aklz.h"
+#include "CorpusTestSupport.h"
 
 #include <gtest/gtest.h>
 
 #include <filesystem>
 #include <algorithm>
+#include <array>
 #include <ranges>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace {
+
+std::array<std::uint8_t, 32U> digestFromHex(const std::string_view hex)
+{
+    const auto nibble = [](const char value) -> std::uint8_t {
+        if (value >= '0' && value <= '9') return static_cast<std::uint8_t>(value - '0');
+        if (value >= 'a' && value <= 'f') return static_cast<std::uint8_t>(value - 'a' + 10);
+        return static_cast<std::uint8_t>(value - 'A' + 10);
+    };
+    std::array<std::uint8_t, 32U> digest{};
+    for (std::size_t i = 0U; i < digest.size(); ++i) {
+        digest[i] = static_cast<std::uint8_t>((nibble(hex[i * 2U]) << 4U) | nibble(hex[i * 2U + 1U]));
+    }
+    return digest;
+}
 
 std::filesystem::path findSctFixture(const std::string& fileName)
 {
@@ -155,6 +172,89 @@ TEST(SctRealFixtures, Me017bParsesAndBuildsScptPrograms)
     EXPECT_TRUE(hasValueKind(parsed,
         spice::sct::SctScptValueKind::FloatBackedIntegerVariable));
     EXPECT_TRUE(hasValueKind(parsed, spice::sct::SctScptValueKind::BitVariable));
+}
+
+TEST(SctRealFixtures, Me201aPublishesExactFirstBattleInstructionAndRawSourceIdentity)
+{
+    if (!spice::tests::corpusTestsEnabled(spice::tests::CorpusFileType::Sct)) {
+        GTEST_SKIP() << spice::tests::corpusTestsOptInMessage(spice::tests::CorpusFileType::Sct);
+    }
+    const std::filesystem::path path =
+        R"(D:\SoAGC\2002-12-19-gc-us-final_Skies_of_Arcadia_Legends\field\me201a.sct)";
+    if (!std::filesystem::is_regular_file(path)) {
+        GTEST_SKIP() << "US GameCube me201a.sct is unavailable";
+    }
+
+    const auto parsed = spice::sct::SctParser{}.parseFile(path.string());
+    ASSERT_TRUE(parsed.parseOk);
+    const auto parsedSection = std::find_if(parsed.file.sections.begin(), parsed.file.sections.end(),
+        [](const auto& section) { return section.id.name == "loop"; });
+    ASSERT_NE(parsedSection, parsed.file.sections.end());
+    const auto parsedInstruction = std::find_if(parsedSection->instructions.begin(), parsedSection->instructions.end(),
+        [](const auto& instruction) { return instruction.offset == 244U; });
+    ASSERT_NE(parsedInstruction, parsedSection->instructions.end());
+    EXPECT_EQ(parsedInstruction->payloadOffset, 396U);
+    EXPECT_EQ(parsedInstruction->opcode, 112U);
+    ASSERT_EQ(parsedInstruction->parameters.size(), 4U);
+    constexpr std::array expectedFloatBits{ 0x3f800000U, 0U, 0x3f800000U, 0x40400000U };
+    for (std::size_t index = 0U; index < expectedFloatBits.size(); ++index) {
+        EXPECT_EQ(parsedInstruction->parameters[index].rawWords,
+            (std::vector<std::uint32_t>{ 0x04000000U, expectedFloatBits[index], 0x0000001dU }));
+    }
+
+    const auto imported = spice::sct::SctDocumentImporter::import(parsed,
+        {{spice::sct::SctPlatform::GameCube}, spice::sct::kSctWindows1252Byte7FEncoding});
+    ASSERT_TRUE(imported.document.has_value()) << documentDiagnosticMessages(imported.diagnostics);
+    const auto& receipt = imported.context.receipt();
+    EXPECT_EQ(receipt.sourcePath, std::optional{path});
+    EXPECT_EQ(receipt.rawSourceSize, 13150U);
+    EXPECT_EQ(receipt.rawSourceSha256,
+        digestFromHex("f72d40d22ffdbf3d6e376c9b6e8378a5f16512df6e4db03274838c1b7ffee9a7"));
+
+    const auto documentSection = std::find_if(imported.document->sections.begin(), imported.document->sections.end(),
+        [](const auto& section) { return section.nameBytes == "loop"; });
+    ASSERT_NE(documentSection, imported.document->sections.end());
+    const auto* script = std::get_if<spice::sct::SctScriptSectionContent>(&documentSection->content);
+    ASSERT_NE(script, nullptr);
+    const spice::sct::SctDocumentInstruction* documentInstruction = nullptr;
+    for (const auto& instruction : script->instructions) {
+        const auto location = receipt.sourceMap.location(spice::sct::SctDocumentEntityId{instruction.id});
+        if (location && location->sectionRelativeOffset == 244U) {
+            documentInstruction = &instruction;
+            break;
+        }
+    }
+    ASSERT_NE(documentInstruction, nullptr);
+    EXPECT_EQ(documentInstruction->opcode, 112U);
+    ASSERT_EQ(documentInstruction->fixedParameters.size(), 4U);
+
+    const auto* schema = spice::sct::findSctOpcodeSchema(112U);
+    ASSERT_NE(schema, nullptr);
+    constexpr std::array expectedRoles{
+        std::string_view{"fixedOrEventBattleModeExpr"}, std::string_view{"encounterIdExpr"},
+        std::string_view{"battleStageExpr"}, std::string_view{"battleTransitionPatternExpr"},
+    };
+    for (std::size_t index = 0U; index < expectedRoles.size(); ++index) {
+        const auto* parameterSchema = spice::sct::sctOpcodeParameterSchema(*schema,
+            static_cast<std::uint32_t>(index));
+        ASSERT_NE(parameterSchema, nullptr);
+        EXPECT_EQ(parameterSchema->role, expectedRoles[index]);
+        const auto* expression = std::get_if<spice::sct::SctCanonicalExpression>(
+            &documentInstruction->fixedParameters[index].value);
+        ASSERT_NE(expression, nullptr);
+        EXPECT_EQ(spice::sct::encodeSctCanonicalExpressionWords(*expression),
+            (std::vector<std::uint32_t>{ 0x04000000U, expectedFloatBits[index], 0x0000001dU }));
+        const auto parameterRecords = receipt.sourceMap.recordsFor(spice::sct::SctImportedSourceTarget{
+            spice::sct::SctParameterSite{documentInstruction->id,
+                {static_cast<std::uint32_t>(index), std::nullopt}}});
+        EXPECT_FALSE(parameterRecords.empty());
+    }
+    const auto instructionRecords = receipt.sourceMap.recordsFor(
+        spice::sct::SctDocumentEntityId{documentInstruction->id});
+    EXPECT_TRUE(std::any_of(instructionRecords.begin(), instructionRecords.end(), [](const auto& record) {
+        return record.role == spice::sct::SctSourceSpanRole::Instruction
+            && record.primaryEntityLocation;
+    }));
 }
 
 TEST(SctRealFixtures, Me017bPreserveModeIsByteIdentical)

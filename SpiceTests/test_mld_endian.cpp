@@ -14,7 +14,7 @@
 #include "../SpicePvm/SpicePvm.h"
 #include "../Compression/Aklz.h"
 #include "../SpiceModeling/SpiceModeling.h"
-#include "MldCorpusTestSupport.h"
+#include "CorpusTestSupport.h"
 
 #include <gtest/gtest.h>
 
@@ -1570,8 +1570,8 @@ TEST(MldDreamcastTextureArchive, RejectsInvalidOrCrossPlatformEncodedTextureByte
 }
 
 TEST(MldDreamcastTextureCorpus, ParsesAndNoEditWritesRegionalMldArchivesReadOnly) {
-    if (!spice::tests::corpusTestsEnabled()) {
-        GTEST_SKIP() << spice::tests::kCorpusTestsOptInMessage;
+    if (!spice::tests::corpusTestsEnabled(spice::tests::CorpusFileType::Mld)) {
+        GTEST_SKIP() << spice::tests::corpusTestsOptInMessage(spice::tests::CorpusFileType::Mld);
     }
 
     const std::array roots{

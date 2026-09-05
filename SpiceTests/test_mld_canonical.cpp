@@ -5,6 +5,7 @@
 #include "../SpiceMLD/Parsing/Sa3dBlenderIrBuilder.h"
 #include "../Compression/Aklz.h"
 #include "../SpiceModeling/SpiceModeling.h"
+#include "CorpusTestSupport.h"
 
 #include <gtest/gtest.h>
 
@@ -15,8 +16,10 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <set>
 #include <sstream>
 #include <span>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -227,6 +230,19 @@ std::filesystem::path findMldFixture(const std::string& name) {
 std::vector<std::uint8_t> readBytes(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(input), {});
+}
+
+std::array<std::uint8_t, 32U> digestFromHex(const std::string_view hex) {
+    const auto nibble = [](const char value) -> std::uint8_t {
+        if (value >= '0' && value <= '9') return static_cast<std::uint8_t>(value - '0');
+        if (value >= 'a' && value <= 'f') return static_cast<std::uint8_t>(value - 'a' + 10);
+        return static_cast<std::uint8_t>(value - 'A' + 10);
+    };
+    std::array<std::uint8_t, 32U> digest{};
+    for (std::size_t i = 0U; i < digest.size(); ++i) {
+        digest[i] = static_cast<std::uint8_t>((nibble(hex[i * 2U]) << 4U) | nibble(hex[i * 2U + 1U]));
+    }
+    return digest;
 }
 
 template <typename VertexRange>
@@ -834,7 +850,47 @@ TEST(MldDocument, ConstructivelyWritesAndRelocatesEditedTextureLists) {
     EXPECT_EQ(reparsed.document->textureLists.front().names.back(), "second");
 }
 
+TEST(MldMotionFrameProjector, ReportsIntrinsicSlotFailuresWithoutInferringAnOwner) {
+    spice::mld::MldDocument document{};
+    document.entries.push_back({
+        .id = spice::mld::MldEntryId{ 1U },
+        .motionSlots = {
+            std::nullopt,
+            spice::mld::MldMotionId{ 99U },
+            spice::mld::MldMotionId{ 1U },
+            spice::mld::MldMotionId{ 2U },
+        },
+    });
+    document.motions.push_back({
+        .id = spice::mld::MldMotionId{ 1U },
+        .payload = spice::mld::MldOpaquePayload{ { 1U } },
+    });
+    document.motions.push_back({
+        .id = spice::mld::MldMotionId{ 2U },
+        .payload = spice::mld::MldDecodedMotion{ .kind = spice::modeling::MotionKind::Node },
+    });
+
+    const auto absent = spice::mld::MldMotionFrameProjector::project(
+        document, spice::mld::MldEntryId{ 2U });
+    EXPECT_FALSE(absent.entryId.has_value());
+    EXPECT_TRUE(absent.slots.empty());
+    EXPECT_FALSE(absent.ok());
+
+    const auto projected = spice::mld::MldMotionFrameProjector::project(
+        document, spice::mld::MldEntryId{ 1U });
+    ASSERT_EQ(projected.slots.size(), 4U);
+    EXPECT_EQ(projected.slots[0].status, spice::mld::MldMotionFrameSlotStatus::EmptySlot);
+    EXPECT_EQ(projected.slots[1].status, spice::mld::MldMotionFrameSlotStatus::MissingMotion);
+    EXPECT_EQ(projected.slots[2].status, spice::mld::MldMotionFrameSlotStatus::OpaqueMotion);
+    EXPECT_EQ(projected.slots[3].status, spice::mld::MldMotionFrameSlotStatus::NoDecodedVariants);
+    EXPECT_FALSE(projected.ok());
+}
+
 TEST(MldDocumentCorpus, ImportsAndReemitsRequestedBattleModelsAcrossPlatformsAndRegions) {
+    if (!spice::tests::corpusTestsEnabled(spice::tests::CorpusFileType::Mld)) {
+        GTEST_SKIP() << spice::tests::corpusTestsOptInMessage(spice::tests::CorpusFileType::Mld);
+    }
+
     struct Case {
         std::filesystem::path path;
         spice::mld::MldPlatform platform;
@@ -886,5 +942,91 @@ TEST(MldDocumentCorpus, ImportsAndReemitsRequestedBattleModelsAcrossPlatformsAnd
         } else {
             EXPECT_EQ(written.bytes, source);
         }
+    }
+}
+
+TEST(MldDocumentCorpus, ProjectsExactFirstBattleMotionFrameCountsFromExplicitOwners) {
+    if (!spice::tests::corpusTestsEnabled(spice::tests::CorpusFileType::Mld)) {
+        GTEST_SKIP() << spice::tests::corpusTestsOptInMessage(spice::tests::CorpusFileType::Mld);
+    }
+
+    using Expected = std::pair<std::size_t, std::uint32_t>;
+    const std::vector<Expected> ma000{
+        {0U,33U},{1U,20U},{2U,20U},{3U,43U},{4U,61U},{5U,30U},{6U,61U},{7U,30U},{8U,30U},{9U,32U},
+        {10U,40U},{11U,68U},{12U,64U},{13U,81U},{14U,32U},{15U,20U},{16U,86U},{17U,70U},{18U,60U},{19U,80U},
+        {20U,21U},{21U,83U},{22U,21U},{23U,86U},{24U,86U},{25U,86U},{26U,86U},{27U,86U},{28U,86U},{29U,86U},
+        {30U,86U},{31U,86U},{32U,86U},{33U,86U},{34U,86U},{35U,86U},{36U,86U},{37U,86U},{38U,86U},{39U,86U},
+        {40U,86U},{41U,86U},{42U,86U},{43U,86U},{44U,86U},{45U,86U},{46U,86U},{47U,86U},{48U,86U},{49U,86U},
+        {50U,86U},{51U,86U},{52U,86U},{53U,86U},{54U,86U},{55U,86U},{56U,86U},{57U,86U},{58U,86U},{59U,214U},
+        {60U,183U},{61U,151U},{62U,100U},{63U,102U},{64U,60U},{65U,112U},{66U,41U},{67U,21U},{68U,33U},{69U,33U},
+        {70U,20U},{71U,20U},{72U,33U},{73U,20U},
+    };
+    const std::vector<Expected> ma001{
+        {0U,32U},{1U,20U},{2U,20U},{3U,39U},{4U,61U},{5U,30U},{6U,51U},{7U,30U},{8U,30U},{9U,21U},
+        {10U,40U},{11U,46U},{12U,75U},{13U,70U},{14U,32U},{15U,20U},{16U,86U},{17U,51U},{18U,79U},{19U,71U},
+        {20U,21U},{21U,81U},{22U,21U},{23U,86U},{24U,86U},{25U,86U},{26U,86U},{27U,86U},{28U,86U},{29U,86U},
+        {30U,86U},{31U,86U},{32U,86U},{33U,86U},{34U,86U},{35U,86U},{36U,86U},{37U,86U},{38U,86U},{39U,86U},
+        {40U,86U},{41U,86U},{42U,86U},{43U,86U},{44U,86U},{45U,86U},{46U,86U},{47U,86U},{48U,86U},{49U,86U},
+        {50U,86U},{51U,86U},{52U,86U},{53U,86U},{54U,86U},{55U,86U},{56U,86U},{57U,86U},{58U,86U},{59U,376U},
+        {60U,190U},{61U,81U},{62U,100U},{63U,95U},{64U,78U},{65U,41U},{66U,21U},{67U,32U},{68U,32U},{69U,20U},
+        {70U,20U},{71U,32U},{72U,20U},
+    };
+    const std::vector<Expected> mb000{
+        {0U,32U},{1U,20U},{2U,20U},{3U,40U},{4U,50U},{5U,31U},{6U,40U},{7U,31U},{8U,31U},{9U,35U},
+        {10U,40U},{11U,20U},{12U,60U},{13U,61U},{14U,61U},{15U,61U},{16U,32U},{17U,32U},{18U,20U},{19U,20U},
+        {20U,32U},{21U,20U},
+    };
+    struct Case {
+        std::filesystem::path path;
+        std::string_view sha256;
+        const std::vector<Expected>* expected;
+    };
+    const std::array cases{
+        Case{ R"(D:\SoAGC\2002-12-19-gc-us-final_Skies_of_Arcadia_Legends\bchara\ma000.mld)", "69e602e7a445111dbb5ee1c7062909769d443797b1076c7c9c4c4929f2a35f71", &ma000 },
+        Case{ R"(D:\SoAGC\2002-12-19-gc-us-final_Skies_of_Arcadia_Legends\bchara\ma001.mld)", "592e6873eca7778175522e19a730e4280808575bde28c1f2fb4d18ee5a442871", &ma001 },
+        Case{ R"(D:\SoAGC\2002-12-19-gc-us-final_Skies_of_Arcadia_Legends\bchara\MB000.mld)", "6e1338b26e70fca208d81932eb93ec126b9fa231fb77dae19dea104fcfa67dd7", &mb000 },
+    };
+    if (std::any_of(cases.begin(), cases.end(), [](const auto& item) { return !std::filesystem::exists(item.path); })) {
+        GTEST_SKIP() << "The US GameCube first-battle MLD corpus is unavailable";
+    }
+
+    for (const auto& item : cases) {
+        SCOPED_TRACE(item.path.string());
+        const auto imported = spice::mld::MldDocumentImporter::importFile(item.path);
+        ASSERT_TRUE(imported.ok());
+        ASSERT_TRUE(imported.document.has_value());
+        ASSERT_EQ(imported.document->entries.size(), 1U);
+        EXPECT_EQ(imported.receipt.sourceSha256, digestFromHex(item.sha256));
+
+        const auto projection = spice::mld::MldMotionFrameProjector::project(
+            *imported.document, imported.document->entries.front().id);
+        ASSERT_TRUE(projection.entryId.has_value());
+        ASSERT_EQ(projection.slots.size(), item.expected->size());
+        EXPECT_TRUE(projection.ok());
+        for (std::size_t index = 0U; index < item.expected->size(); ++index) {
+            const auto& expected = item.expected->at(index);
+            const auto& actual = projection.slots[index];
+            EXPECT_EQ(actual.slotOrdinal, expected.first);
+            ASSERT_TRUE(actual.motionId.has_value());
+            ASSERT_TRUE(actual.agreedDeclaredFrameCount.has_value());
+            EXPECT_EQ(*actual.agreedDeclaredFrameCount, expected.second);
+            EXPECT_EQ(actual.status, spice::mld::MldMotionFrameSlotStatus::Resolved);
+            ASSERT_FALSE(actual.variants.empty());
+            for (const auto& variant : actual.variants) {
+                EXPECT_TRUE(variant.variantId);
+                EXPECT_EQ(variant.declaredFrameCount, expected.second);
+            }
+        }
+        std::set<std::uint64_t> variantIds{};
+        for (const auto& motion : imported.document->motions) {
+            const auto* decoded = std::get_if<spice::mld::MldDecodedMotion>(&motion.payload);
+            if (decoded == nullptr) continue;
+            for (const auto& variant : decoded->variants) {
+                EXPECT_TRUE(variant.id);
+                EXPECT_TRUE(variantIds.insert(variant.id.value).second);
+            }
+        }
+        ASSERT_FALSE(variantIds.empty());
+        EXPECT_EQ(imported.document->allocateMotionVariantId().value, *variantIds.rbegin() + 1U);
     }
 }

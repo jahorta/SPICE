@@ -7,6 +7,7 @@
 #include "../SpiceSstSml/SstSmlDocumentAnalysis.h"
 #include "../SpiceSstSml/SstSmlDocumentMaterialization.h"
 #include "../SpiceSstSml/SstSmlExport.h"
+#include "CorpusTestSupport.h"
 
 #include <gtest/gtest.h>
 
@@ -14,6 +15,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -21,6 +23,19 @@ namespace {
 using spice::root::Endian;
 using spice::root::EndianSpanWriter;
 using namespace spice::sstsml;
+
+std::array<std::uint8_t, 32U> digestFromHex(const std::string_view hex) {
+    const auto nibble = [](const char value) -> std::uint8_t {
+        if (value >= '0' && value <= '9') return static_cast<std::uint8_t>(value - '0');
+        if (value >= 'a' && value <= 'f') return static_cast<std::uint8_t>(value - 'a' + 10);
+        return static_cast<std::uint8_t>(value - 'A' + 10);
+    };
+    std::array<std::uint8_t, 32U> digest{};
+    for (std::size_t i = 0U; i < digest.size(); ++i) {
+        digest[i] = static_cast<std::uint8_t>((nibble(hex[i * 2U]) << 4U) | nibble(hex[i * 2U + 1U]));
+    }
+    return digest;
+}
 
 std::vector<std::uint8_t> makeMinimalMld(const Endian endian) {
     std::vector<std::uint8_t> bytes(0x340U, 0xCDU);
@@ -469,6 +484,9 @@ TEST(SpiceSstSmlDocument, SecondaryResearchExportConsumesDocumentAndAnalysis) {
 }
 
 TEST(SpiceSstSmlDocument, ImportsUsGameCubeS001AcceptancePair) {
+    if (!spice::tests::corpusTestsEnabled(spice::tests::CorpusFileType::SstSml)) {
+        GTEST_SKIP() << spice::tests::corpusTestsOptInMessage(spice::tests::CorpusFileType::SstSml);
+    }
     const std::filesystem::path root =
         R"(D:\SoAGC\2002-12-19-gc-us-final_Skies_of_Arcadia_Legends\battle)";
     const auto smlPath = root / "s001.sml";
@@ -481,6 +499,26 @@ TEST(SpiceSstSmlDocument, ImportsUsGameCubeS001AcceptancePair) {
     ASSERT_TRUE(imported.document.has_value());
     EXPECT_EQ(imported.document->stageId, 1U);
     EXPECT_EQ(imported.document->members.size(), 10U);
+    ASSERT_EQ(imported.receipt.sml.path, std::optional{ smlPath });
+    ASSERT_EQ(imported.receipt.sst.path, std::optional{ sstPath });
+    EXPECT_EQ(imported.receipt.sml.rawSha256,
+        digestFromHex("75e383749902a8ec89656a22c8a147c533cdbe7c8ee051077577aea74999f8bb"));
+    EXPECT_EQ(imported.receipt.sst.rawSha256,
+        digestFromHex("c0b5f88ac2f884d4ccbc0bd1bd171c510277897b4541eb4aaa12afedc44ed644"));
+    ASSERT_TRUE(imported.document->members.front().sst.commandBlock.battleGrid.has_value());
+    constexpr std::array<std::uint8_t, 81U> expectedBattleGrid{
+        1,1,1,1,1,1,1,1,1,
+        1,1,1,1,1,1,1,1,1,
+        1,1,0,0,0,0,0,1,1,
+        1,1,0,0,0,0,0,1,1,
+        1,1,0,0,0,0,0,1,1,
+        1,1,0,0,0,0,0,1,1,
+        1,1,0,0,0,0,0,1,1,
+        1,1,1,1,1,1,1,1,1,
+        1,1,1,1,1,1,1,1,1,
+    };
+    EXPECT_EQ(imported.document->members.front().sst.commandBlock.battleGrid->values,
+        expectedBattleGrid);
     std::size_t type0Count = 0U;
     std::size_t type1Count = 0U;
     for (const auto& member : imported.document->members) {

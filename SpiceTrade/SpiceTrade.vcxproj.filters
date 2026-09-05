@@ -21,6 +21,9 @@
     <ClInclude Include="AlxImporter.h">
       <Filter>Typed ALX</Filter>
     </ClInclude>
+    <ClInclude Include="AlxSha256.h">
+      <Filter>Typed ALX</Filter>
+    </ClInclude>
     <ClInclude Include="AlxModel.h">
       <Filter>Typed ALX</Filter>
     </ClInclude>
@@ -39,6 +42,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AlxImporter.cpp">
+      <Filter>Typed ALX</Filter>
+    </ClCompile>
+    <ClCompile Include="AlxSha256.cpp">
       <Filter>Typed ALX</Filter>
     </ClCompile>
     <ClCompile Include="AlxModel.cpp">

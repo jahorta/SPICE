@@ -6,7 +6,7 @@
 #include "../SpiceMLD/Parsing/GobjParser.h"
 #include "../SpiceMLD/Parsing/GrndParser.h"
 #include "../Compression/Aklz.h"
-#include "MldCorpusTestSupport.h"
+#include "CorpusTestSupport.h"
 
 #include <gtest/gtest.h>
 
@@ -747,8 +747,8 @@ TEST(MldPatching, RejectsStaleProvenanceAfterSemanticModelEdits) {
 }
 
 TEST(MldGroundMetadataCorpus, MatchesGameCubeAndDreamcastResearchInventories) {
-    if (!spice::tests::corpusTestsEnabled()) {
-        GTEST_SKIP() << spice::tests::kCorpusTestsOptInMessage;
+    if (!spice::tests::corpusTestsEnabled(spice::tests::CorpusFileType::Mld)) {
+        GTEST_SKIP() << spice::tests::corpusTestsOptInMessage(spice::tests::CorpusFileType::Mld);
     }
 
     const std::vector<std::filesystem::path> gameCubeRoots{
@@ -784,8 +784,8 @@ TEST(MldGroundMetadataCorpus, MatchesGameCubeAndDreamcastResearchInventories) {
 }
 
 TEST(MldPatchingCorpus, ResolvesRealDreamcastGrndAndGobjPatchOffsets) {
-    if (!spice::tests::corpusTestsEnabled()) {
-        GTEST_SKIP() << spice::tests::kCorpusTestsOptInMessage;
+    if (!spice::tests::corpusTestsEnabled(spice::tests::CorpusFileType::Mld)) {
+        GTEST_SKIP() << spice::tests::corpusTestsOptInMessage(spice::tests::CorpusFileType::Mld);
     }
 
     const std::array roots{

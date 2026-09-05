@@ -22,6 +22,8 @@ The hard-cut public surface imports exactly these tables:
 
 Each table has a typed importer and semantic record model. `AlxDatasetImporter` imports a requested set atomically: a missing or invalid table prevents publication of the entire dataset. It can also request the complete whitelist. There is intentionally no writer, change tracker, or generic public CSV document/workspace API in this release.
 
+Every successful table import also returns source metadata containing the logical path, raw byte size, and raw SHA-256. This provenance remains outside the editable table and does not imply relationships between independently imported CSVs.
+
 Ordinary records use stable identities of the form `<table>.<entryId>`. Enemy tasks use `enemytask.<ecId>.<entryId>` because their entry IDs are local to an enemy. Enemy encounters use their ENP owner and entry ID. Membership, identity, and order are fixed by import; consumers may edit record fields through each table's `edit` function.
 
 For `enemy.csv` and `enemytask.csv`, only rows whose `[Filter]` cell is exactly `*` are canonical gameplay records. Enemy encounters retain every owner group but discard entry 0 as the ALX placeholder slot; entries 1 and later are published. The encounter `[Filter]` value is the ENP owner key, not wildcard selection metadata.
