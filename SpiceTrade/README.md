@@ -1,45 +1,35 @@
 # SpiceTrade
 
-`SpiceTrade` is a static library for controlled interchange with external
-game-data tools. Its initial compatibility target is the CSV dialect emitted
-and consumed by ALX 5.0.0.
+`SpiceTrade` is an import-only static library for typed interchange with CSVs produced by ALX 5.0.0. It fills selected editing gaps without taking ownership of game file formats already modeled by another SPICE project.
 
-The library owns CSV interchange: ordered UTF-8 transport, typed editable
-records for admitted tables, exact ALX 5.0.0 schemas, diagnostics, and change
-tracking. It does not own display models, domain joins, or binary game formats.
-
-The initial whitelist contains exactly:
+The hard-cut public surface imports exactly these tables:
 
 - `enemy.csv`
 - `enemyencounter.csv`
 - `enemyevent.csv`
+- `enemytask.csv`
+- `enemymagic.csv`
+- `accessory.csv`
+- `armor.csv`
+- `usableitem.csv`
+- `weapon.csv`
+- `weaponeffect.csv`
+- `expcurve.csv`
+- `character.csv`
+- `charactermagic.csv`
+- `charactersupermove.csv`
+- `magicexpcurve.csv`
 
-`EnemyCsvCodec`, `EnemyEncounterCsvCodec`, and `EnemyEventCsvCodec` parse those
-files into ordered editable tables and serialize them back to CSV. Records can
-be inserted, removed, or reordered; duplicate IDs are preserved. Bracketed ALX
-reference/display columns are retained as strings so a read/edit/write cycle
-does not discard them.
+Each table has a typed importer and semantic record model. `AlxDatasetImporter` imports a requested set atomically: a missing or invalid table prevents publication of the entire dataset. It can also request the complete whitelist. There is intentionally no writer, change tracker, or generic public CSV document/workspace API in this release.
 
-The codecs recognize the exact ALX 5.0.0 Japanese, US, and EU header layouts.
-Locale and CSV formatting belong to read/write metadata, not to the semantic
-table models. Validation is limited to whether values can be represented by
-the ALX schema; it does not impose gameplay ranges or require references to
-resolve across tables.
+Ordinary records use stable identities of the form `<table>.<entryId>`. Enemy tasks use `enemytask.<ecId>.<entryId>` because their entry IDs are local to an enemy. Enemy encounters use their ENP owner and entry ID. Membership, identity, and order are fixed by import; consumers may edit record fields through each table's `edit` function.
 
-`AlxWorkspaceReader` loads any nonempty requested subset of the three tables
-and fails the requested import as a unit. `AlxWorkspaceWriter` writes only
-tables whose typed models changed, using their canonical filenames. The three
-tables remain independently loadable and editable.
+For `enemy.csv` and `enemytask.csv`, only rows whose `[Filter]` cell is exactly `*` are canonical gameplay records. Enemy encounters retain every owner group but discard entry 0 as the ALX placeholder slot; entries 1 and later are published. The encounter `[Filter]` value is the ENP owner key, not wildcard selection metadata.
 
-Other CSV families remain excluded until they are explicitly whitelisted as
-gaps for which SPICE does not plan a native editor. CSVs representing formats
-with native SPICE ownership remain with those projects. Script-task CSVs are
-out of scope because SALSA owns that editing workflow.
+Bracketed columns are normally read-only derived annotations. European `[Entry GB Name]`, `[GB Descr Str]`, and `[Ship GB Descr Str]` fields are exceptions because ALX imports them as actual localized message text; those values are semantic and editable. Imported derived annotations live in `AlxDerivedContext`, and `AlxDerivedViewBuilder` creates fresh read-only views from the current dataset. Derived mismatches produce warnings without blocking publication.
 
-ALX's GPLv3 Ruby source may be used as a behavioral reference and external
-compatibility oracle, but its implementation is not copied or line-translated.
-An optional, user-provided `Alx v5.0.0 corpuses` directory may contain private
-reference exports for local compatibility testing. The directory is ignored by
-Git and must not be committed. Corpus tests verify semantic typed round trips
-across all three whitelisted tables when those private inputs are available and
-skip cleanly when they are absent.
+The exact Japanese, US, and European ALX 5.0.0 header profiles are validated. Platform is not represented because the CSV schema does not distinguish Dreamcast and GameCube. Locale-neutral tables require a locale hint when imported alone; a dataset import can infer their locale from another requested locale-specific table.
+
+SpiceTrade does not own display models, domain-level joins, SALSA script authoring, SIMMER AI execution, binary game formats, or source-range provenance. CSV output remains intentionally deferred; any future publication operation must be atomic.
+
+ALX's GPLv3 Ruby source is a behavioral reference and compatibility oracle, not copied implementation. The ignored `Alx v5.0.0 corpuses` directory may contain private reference exports for local testing and must never be committed. Acceptance covers all 15 tables across the nine available final Dreamcast and GameCube JP, US, and EU datasets.

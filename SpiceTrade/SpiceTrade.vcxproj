@@ -95,23 +95,19 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="AlxTypedCodec.h" />
-    <ClInclude Include="AlxTypedModel.h" />
-    <ClInclude Include="AlxTypedWorkspace.h" />
+    <ClInclude Include="AlxDerivedView.h" />
+    <ClInclude Include="AlxImporter.h" />
+    <ClInclude Include="AlxModel.h" />
     <ClInclude Include="CsvModel.h" />
     <ClInclude Include="CsvReader.h" />
-    <ClInclude Include="CsvWriter.h" />
     <ClInclude Include="SpiceTrade.h" />
-    <ClInclude Include="Workspace.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="AlxTypedCodec.cpp" />
-    <ClCompile Include="AlxTypedModel.cpp" />
-    <ClCompile Include="AlxTypedWorkspace.cpp" />
+    <ClCompile Include="AlxDerivedView.cpp" />
+    <ClCompile Include="AlxImporter.cpp" />
+    <ClCompile Include="AlxModel.cpp" />
     <ClCompile Include="CsvModel.cpp" />
     <ClCompile Include="CsvReader.cpp" />
-    <ClCompile Include="CsvWriter.cpp" />
-    <ClCompile Include="Workspace.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" />

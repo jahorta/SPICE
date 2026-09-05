@@ -10,12 +10,6 @@
     <Filter Include="Reader">
       <UniqueIdentifier>{A9EF5D75-FCD7-4C4F-A57D-30F7849170C8}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Writer">
-      <UniqueIdentifier>{73266268-DADB-4037-9198-2482659C4404}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Workspace">
-      <UniqueIdentifier>{34A090C6-3F42-45F4-AEE5-2F6F179901D4}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Typed ALX">
       <UniqueIdentifier>{E950A2AA-9A2D-48DF-A1E5-48DD0B4924CC}</UniqueIdentifier>
     </Filter>
@@ -24,13 +18,13 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="AlxTypedCodec.h">
+    <ClInclude Include="AlxImporter.h">
       <Filter>Typed ALX</Filter>
     </ClInclude>
-    <ClInclude Include="AlxTypedModel.h">
+    <ClInclude Include="AlxModel.h">
       <Filter>Typed ALX</Filter>
     </ClInclude>
-    <ClInclude Include="AlxTypedWorkspace.h">
+    <ClInclude Include="AlxDerivedView.h">
       <Filter>Typed ALX</Filter>
     </ClInclude>
     <ClInclude Include="SpiceTrade.h">
@@ -42,21 +36,15 @@
     <ClInclude Include="CsvReader.h">
       <Filter>Reader</Filter>
     </ClInclude>
-    <ClInclude Include="CsvWriter.h">
-      <Filter>Writer</Filter>
-    </ClInclude>
-    <ClInclude Include="Workspace.h">
-      <Filter>Workspace</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="AlxTypedCodec.cpp">
+    <ClCompile Include="AlxImporter.cpp">
       <Filter>Typed ALX</Filter>
     </ClCompile>
-    <ClCompile Include="AlxTypedModel.cpp">
+    <ClCompile Include="AlxModel.cpp">
       <Filter>Typed ALX</Filter>
     </ClCompile>
-    <ClCompile Include="AlxTypedWorkspace.cpp">
+    <ClCompile Include="AlxDerivedView.cpp">
       <Filter>Typed ALX</Filter>
     </ClCompile>
     <ClCompile Include="CsvModel.cpp">
@@ -64,12 +52,6 @@
     </ClCompile>
     <ClCompile Include="CsvReader.cpp">
       <Filter>Reader</Filter>
-    </ClCompile>
-    <ClCompile Include="CsvWriter.cpp">
-      <Filter>Writer</Filter>
-    </ClCompile>
-    <ClCompile Include="Workspace.cpp">
-      <Filter>Workspace</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

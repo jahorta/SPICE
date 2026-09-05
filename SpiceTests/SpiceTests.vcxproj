@@ -112,7 +112,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="MldCorpusTestSupport.h" />
-    <None Include="fixtures\spice_trade\enemyevent_quoted.csv" />
     <ClCompile Include="..\third-party\googletest-1.17.0\googletest\src\gtest-all.cc" />
     <ClCompile Include="run_tests.cpp" />
     <ClCompile Include="test_aklz.cpp" />
@@ -154,7 +153,6 @@
     <ClCompile Include="test_std_parser.cpp" />
     <ClCompile Include="test_std_usage.cpp" />
     <ClCompile Include="test_spice_trade.cpp" />
-    <ClCompile Include="test_spice_trade_typed.cpp" />
     <ClCompile Include="test_spice_grinder_cli.cpp" />
     <ClCompile Include="test_spice_mix_documents.cpp" />
     <ClCompile Include="..\SpiceGrinder\Cli\CliParser.cpp">

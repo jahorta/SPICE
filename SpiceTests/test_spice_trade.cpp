@@ -2,296 +2,114 @@
 
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <array>
-#include <chrono>
-#include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
-#include <string>
-#include <vector>
+#include <set>
 
 namespace {
+using namespace spice::trade::alx;
 
-using spice::trade::alx::CsvDocument;
-using spice::trade::alx::CsvFormat;
-using spice::trade::alx::CsvLineEnding;
-using spice::trade::alx::CsvReader;
-using spice::trade::alx::CsvWriter;
-using spice::trade::alx::DiagnosticSeverity;
-using spice::trade::alx::TrackedDocument;
-using spice::trade::alx::Workspace;
-using spice::trade::alx::WorkspaceReader;
-using spice::trade::alx::WorkspaceWriter;
-
-std::vector<std::uint8_t> bytes(const std::string& value)
-{
-    return std::vector<std::uint8_t>(value.begin(), value.end());
-}
-
-void writeBytes(const std::filesystem::path& path, const std::string& value)
-{
-    std::filesystem::create_directories(path.parent_path());
-    std::ofstream output(path, std::ios::binary | std::ios::trunc);
-    output.write(value.data(), static_cast<std::streamsize>(value.size()));
-}
-
-std::string readText(const std::filesystem::path& path)
-{
-    std::ifstream input(path, std::ios::binary);
-    return std::string(
-        std::istreambuf_iterator<char>(input),
-        std::istreambuf_iterator<char>());
-}
-
-class TemporaryDirectory {
-public:
-    TemporaryDirectory()
-    {
-        const auto nonce = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-        path = std::filesystem::temp_directory_path()
-            / ("spice_trade_tests_" + std::to_string(nonce));
-        std::filesystem::create_directories(path);
-    }
-
-    ~TemporaryDirectory()
-    {
-        std::error_code error{};
-        std::filesystem::remove_all(path, error);
-    }
-
-    std::filesystem::path path{};
-};
-
-std::filesystem::path referenceCorpusRoot()
+std::filesystem::path corpusRoot()
 {
     auto cursor = std::filesystem::current_path();
-    for (std::size_t depth = 0U; depth < 8U; ++depth) {
+    for (std::size_t depth = 0; depth < 8; ++depth) {
         const auto candidate = cursor / "SpiceTrade" / "Alx v5.0.0 corpuses";
-        if (std::filesystem::is_directory(candidate)) {
-            return candidate;
-        }
-        if (!cursor.has_parent_path() || cursor.parent_path() == cursor) {
-            break;
-        }
+        if (std::filesystem::is_directory(candidate)) return candidate;
+        if (!cursor.has_parent_path() || cursor.parent_path() == cursor) break;
         cursor = cursor.parent_path();
     }
     return {};
 }
 
-bool hasWarning(const std::vector<spice::trade::alx::CsvDiagnostic>& diagnostics)
+struct DatasetCase { const char* path; AlxLocale locale; std::size_t enemies; std::size_t tasks; std::size_t events; };
+constexpr std::array kDatasets{
+    DatasetCase{ "2000-08-28-dc-jp-final/disc-1", AlxLocale::Japanese, 157, 2308, 80 },
+    DatasetCase{ "2000-08-28-dc-jp-final/disc-2", AlxLocale::Japanese, 157, 2308, 80 },
+    DatasetCase{ "2000-09-18-dc-us-final/disc-1", AlxLocale::UnitedStates, 157, 2308, 80 },
+    DatasetCase{ "2000-09-18-dc-us-final/disc-2", AlxLocale::UnitedStates, 157, 2308, 80 },
+    DatasetCase{ "2001-02-19-dc-eu-final/disc-1", AlxLocale::Europe, 157, 2308, 80 },
+    DatasetCase{ "2001-02-19-dc-eu-final/disc-2", AlxLocale::Europe, 157, 2308, 80 },
+    DatasetCase{ "2002-11-12-gc-jp-final", AlxLocale::Japanese, 245, 5123, 250 },
+    DatasetCase{ "2002-12-19-gc-us-final", AlxLocale::UnitedStates, 245, 5123, 250 },
+    DatasetCase{ "2003-03-05-gc-eu-final", AlxLocale::Europe, 245, 5123, 250 },
+};
+
+std::size_t taskCount(const EnemyTaskTable& table) { std::size_t n=0; for (const auto& g:table.groups()) n+=g.records().size(); return n; }
+std::size_t encounterCount(const EnemyEncounterTable& table) { std::size_t n=0; for (const auto& g:table.groups()) n+=g.records().size(); return n; }
+
+TEST(SpiceTradeHardCut, WhitelistAndStableIdentitiesAreCanonical)
 {
-    for (const auto& diagnostic : diagnostics) {
-        if (diagnostic.severity == DiagnosticSeverity::Warning) {
-            return true;
-        }
+    ASSERT_EQ(whitelistedTables().size(), 15U);
+    EXPECT_TRUE(whitelistedTableKind("ENEMYTASK.CSV").has_value());
+    EXPECT_EQ(canonicalIdentity(EnemyEntryId{42}), "enemy.42");
+    EXPECT_EQ(canonicalIdentity(EnemyTaskEntryId{EnemyEntryId{42},3}), "enemytask.42.3");
+    EXPECT_EQ(canonicalIdentity(EnemyEncounterEntryId{"MA000.ENP",7}), "enemyencounter.ma000.enp.7");
+}
+
+TEST(SpiceTradeHardCut, ImportsAllFifteenTablesAtomicallyAcrossAllFinalDatasets)
+{
+    const auto corpus=corpusRoot(); if(corpus.empty()) GTEST_SKIP() << "Private ALX 5.0.0 reference corpus is unavailable";
+    for(const auto& expected:kDatasets){
+        const auto path=corpus/expected.path; auto imported=AlxDatasetImporter{}.importWhitelistedDirectory(path);
+        ASSERT_TRUE(imported.ok()) << path.string() << (imported.diagnostics.empty()?"":imported.diagnostics.front().message);
+        ASSERT_EQ(imported.locale,expected.locale); ASSERT_EQ(imported.metadata.size(),15U);
+        const auto& d=*imported.dataset;
+        ASSERT_TRUE(d.enemies&&d.enemyEncounters&&d.enemyEvents&&d.enemyTasks&&d.enemyMagic&&d.accessories&&d.armor&&d.usableItems&&d.weapons&&d.weaponEffects&&d.experienceCurves&&d.characters&&d.characterMagic&&d.characterSuperMoves&&d.magicExperienceCurves);
+        EXPECT_EQ(d.enemies->records().size(),expected.enemies)<<path.string(); EXPECT_EQ(taskCount(*d.enemyTasks),expected.tasks)<<path.string();
+        EXPECT_EQ(d.enemyEvents->records().size(),expected.events); EXPECT_EQ(d.enemyEncounters->groups().size(),50U); EXPECT_EQ(encounterCount(*d.enemyEncounters),1412U);
+        EXPECT_EQ(d.enemyMagic->records().size(),36U); EXPECT_EQ(d.accessories->records().size(),80U); EXPECT_EQ(d.armor->records().size(),80U);
+        EXPECT_EQ(d.usableItems->records().size(),80U); EXPECT_EQ(d.weapons->records().size(),80U); EXPECT_EQ(d.weaponEffects->records().size(),21U);
+        EXPECT_EQ(d.experienceCurves->records().size(),6U); EXPECT_EQ(d.characters->records().size(),6U); EXPECT_EQ(d.characterMagic->records().size(),36U);
+        EXPECT_EQ(d.characterSuperMoves->records().size(),26U); EXPECT_EQ(d.magicExperienceCurves->records().size(),6U);
     }
-    return false;
 }
 
-TEST(SpiceTradeCsv, ParsesAndCanonicallyWritesComplexUtf8Csv)
+TEST(SpiceTradeHardCut, FieldsAreMutableWhileIdentityAndOrderStayStable)
 {
-    std::string input = "Name,Note,Empty\r\n";
-    input += "Alpha,\"comma, quote \"\" and\r\nline\",\r\n";
-    input += "\xe8\x88\xb9,plain,last\r\n";
-
-    const auto parsed = CsvReader{}.parse(bytes(input));
-    ASSERT_TRUE(parsed.ok());
-    ASSERT_TRUE(parsed.document.has_value());
-    EXPECT_FALSE(parsed.format.utf8Bom);
-    EXPECT_EQ(parsed.format.lineEnding, CsvLineEnding::CrLf);
-    EXPECT_TRUE(parsed.format.finalLineEnding);
-    EXPECT_EQ(parsed.document->columnIndex("Note"), 1U);
-    EXPECT_FALSE(parsed.document->columnIndex("Missing").has_value());
-    ASSERT_EQ(parsed.document->rows.size(), 2U);
-    EXPECT_EQ(parsed.document->rows[0][1], "comma, quote \" and\r\nline");
-    EXPECT_TRUE(parsed.document->rows[0][2].empty());
-    EXPECT_EQ(parsed.document->rows[1][0], "\xe8\x88\xb9");
-
-    const auto written = CsvWriter{}.write(*parsed.document, parsed.format);
-    ASSERT_TRUE(written.ok());
-    const auto reparsed = CsvReader{}.parse(written.bytes);
-    ASSERT_TRUE(reparsed.ok());
-    EXPECT_EQ(reparsed.document, parsed.document);
-    EXPECT_EQ(reparsed.format, parsed.format);
+    const auto corpus=corpusRoot(); if(corpus.empty()) GTEST_SKIP();
+    auto imported=AlxDatasetImporter{}.importWhitelistedDirectory(corpus/"2002-12-19-gc-us-final"); ASSERT_TRUE(imported.ok());
+    auto& enemies=*imported.dataset->enemies; const auto id=enemies.records().front().id(); const auto count=enemies.records().size();
+    ASSERT_NE(enemies.edit(id),nullptr); enemies.edit(id)->maxHp+=123; EXPECT_EQ(enemies.records().front().id(),id); EXPECT_EQ(enemies.records().size(),count);
+    auto& tasks=*imported.dataset->enemyTasks; const auto task=tasks.groups().front().records().front().id();
+    ASSERT_NE(tasks.edit(task),nullptr); tasks.edit(task)->parameterId=77; EXPECT_EQ(tasks.groups().front().records().front().id(),task);
 }
 
-TEST(SpiceTradeCsv, PreservesBomLfAndMissingFinalLineEnding)
+TEST(SpiceTradeHardCut, LocaleNeutralTablesRequireContextAndDatasetCanInferIt)
 {
-    const std::vector<std::uint8_t> input{
-        0xefU, 0xbbU, 0xbfU,
-        'A', ',', 'B', '\n',
-        '1', ',', '2',
-    };
-    const auto parsed = CsvReader{}.parse(input);
-    ASSERT_TRUE(parsed.ok());
-    EXPECT_TRUE(parsed.format.utf8Bom);
-    EXPECT_EQ(parsed.format.lineEnding, CsvLineEnding::Lf);
-    EXPECT_FALSE(parsed.format.finalLineEnding);
-
-    const auto written = CsvWriter{}.write(*parsed.document, parsed.format);
-    ASSERT_TRUE(written.ok());
-    EXPECT_EQ(written.bytes, input);
+    const auto corpus=corpusRoot(); if(corpus.empty()) GTEST_SKIP(); const auto root=corpus/"2002-12-19-gc-us-final";
+    EXPECT_FALSE(ExpCurveCsvImporter{}.importFile(root/"expcurve.csv").ok());
+    EXPECT_TRUE(ExpCurveCsvImporter{}.importFile(root/"expcurve.csv",{.localeHint=AlxLocale::UnitedStates}).ok());
+    EXPECT_FALSE(EnemyCsvImporter{}.importFile(root/"enemy.csv",{.localeHint=AlxLocale::Europe}).ok());
+    const std::array requested{AlxTableKind::Enemy,AlxTableKind::ExpCurve,AlxTableKind::MagicExpCurve};
+    const auto dataset=AlxDatasetImporter{}.importDirectory(root,requested); EXPECT_TRUE(dataset.ok()); EXPECT_EQ(dataset.locale,AlxLocale::UnitedStates);
 }
 
-TEST(SpiceTradeCsv, WarnsOnMixedRecordLineEndingsAndUsesFirstStyle)
+TEST(SpiceTradeHardCut, EuropeanImportedMessageTextIsSemanticAndEditable)
 {
-    const auto parsed = CsvReader{}.parse(bytes("A\r\n1\n2\r\n"));
-    ASSERT_TRUE(parsed.ok());
-    EXPECT_TRUE(hasWarning(parsed.diagnostics));
-    EXPECT_EQ(parsed.format.lineEnding, CsvLineEnding::CrLf);
-
-    const auto written = CsvWriter{}.write(*parsed.document, parsed.format);
-    ASSERT_TRUE(written.ok());
-    EXPECT_EQ(std::string(written.bytes.begin(), written.bytes.end()), "A\r\n1\r\n2\r\n");
+    const auto corpus=corpusRoot(); if(corpus.empty()) GTEST_SKIP();
+    auto imported=AccessoryCsvImporter{}.importFile(corpus/"2003-03-05-gc-eu-final"/"accessory.csv"); ASSERT_TRUE(imported.ok());
+    const auto id=imported.table->records().front().id(); auto* fields=imported.table->edit(id); ASSERT_NE(fields,nullptr); ASSERT_TRUE(fields->name.messageId);
+    fields->name.text="Edited GB name"; fields->description="Edited GB description"; EXPECT_EQ(imported.table->find(id)->name.text,"Edited GB name");
 }
 
-TEST(SpiceTradeCsv, RejectsMalformedAndStructurallyInvalidDocuments)
+TEST(SpiceTradeHardCut, DerivedViewsRebuildKnownReferencesFromCurrentIds)
 {
-    EXPECT_FALSE(CsvReader{}.parse({}).ok());
-    EXPECT_FALSE(CsvReader{}.parse(bytes("A,A\r\n1,2\r\n")).ok());
-    EXPECT_FALSE(CsvReader{}.parse(bytes("A,B\r\n1\r\n")).ok());
-    EXPECT_FALSE(CsvReader{}.parse(bytes("A,B\r\n1,ab\"cd\r\n")).ok());
-    EXPECT_FALSE(CsvReader{}.parse(bytes("A,B\r\n1,\"unterminated")).ok());
-
-    const std::vector<std::uint8_t> invalidUtf8{ 'A', '\r', '\n', 0xc0U, 0xafU, '\r', '\n' };
-    EXPECT_FALSE(CsvReader{}.parse(invalidUtf8).ok());
-
-    CsvDocument invalidWidth{
-        .headers = { "A", "B" },
-        .rows = { { "1" } },
-    };
-    EXPECT_FALSE(CsvWriter{}.write(invalidWidth).ok());
+    const auto corpus=corpusRoot(); if(corpus.empty()) GTEST_SKIP();
+    const std::array requested{AlxTableKind::Enemy,AlxTableKind::EnemyEvent,AlxTableKind::Character};
+    auto imported=AlxDatasetImporter{}.importDirectory(corpus/"2002-12-19-gc-us-final",requested); ASSERT_TRUE(imported.ok());
+    const auto id=imported.dataset->enemyEvents->records().front().id(); auto* event=imported.dataset->enemyEvents->edit(id); ASSERT_NE(event,nullptr);
+    event->enemies[0].enemy=EnemyEntryId{0}; auto* enemy=imported.dataset->enemies->edit(EnemyEntryId{0}); ASSERT_NE(enemy,nullptr);
+    enemy->japaneseName="Edited current enemy";
+    const auto view=AlxDerivedViewBuilder{}.build(*imported.dataset,imported.derivedContext,AlxTableKind::EnemyEvent);
+    ASSERT_FALSE(view.rows.empty()); EXPECT_EQ(view.rows.front().cells.at("[EC1 JP Name]"),"Edited current enemy");
+    EXPECT_FALSE(view.diagnostics.empty()); EXPECT_EQ(view.diagnostics.front().severity,AlxDiagnosticSeverity::Warning);
 }
 
-TEST(SpiceTradeWorkspace, TracksStructuralChangesByBaselineComparison)
+TEST(SpiceTradeHardCut, MissingRequestedTablePublishesNothing)
 {
-    const CsvDocument baseline{
-        .headers = { "A", "B" },
-        .rows = { { "1", "2" }, { "3", "4" } },
-    };
-    TrackedDocument document{
-        .relativePath = "sample.csv",
-        .baseline = baseline,
-        .current = baseline,
-    };
-    EXPECT_FALSE(document.changed());
-
-    document.current.headers[0] = "Changed";
-    EXPECT_TRUE(document.changed());
-    document.current = baseline;
-    document.current.rows.push_back({ "5", "6" });
-    EXPECT_TRUE(document.changed());
-    document.current = baseline;
-    std::swap(document.current.rows[0], document.current.rows[1]);
-    EXPECT_TRUE(document.changed());
-}
-
-TEST(SpiceTradeWorkspace, WritesOnlyChangedFilesAndMarksThemClean)
-{
-    TemporaryDirectory temp{};
-    const auto source = temp.path / "source";
-    const auto output = temp.path / "output";
-    writeBytes(source / "alpha.csv", "ID,Name\r\n1,Alpha\r\n");
-    writeBytes(source / "nested" / "beta.csv", "ID,Name\r\n2,Beta\r\n");
-
-    const std::array<std::filesystem::path, 2U> requested{
-        "alpha.csv",
-        std::filesystem::path("nested") / "beta.csv",
-    };
-    auto read = WorkspaceReader{}.read(source, requested);
-    ASSERT_TRUE(read.ok());
-    ASSERT_TRUE(read.workspace.has_value());
-    EXPECT_TRUE(read.workspace->changedPaths().empty());
-
-    auto* alpha = read.workspace->find("ALPHA.CSV");
-    ASSERT_NE(alpha, nullptr);
-    alpha->current.rows[0][1] = "Changed, Alpha";
-    EXPECT_EQ(read.workspace->changedPaths(), std::vector<std::filesystem::path>{ "alpha.csv" });
-
-    const auto written = WorkspaceWriter{}.writeChanged(*read.workspace, output);
-    ASSERT_TRUE(written.ok());
-    EXPECT_EQ(written.writtenPaths, std::vector<std::filesystem::path>{ "alpha.csv" });
-    EXPECT_TRUE(std::filesystem::exists(output / "alpha.csv"));
-    EXPECT_FALSE(std::filesystem::exists(output / "nested" / "beta.csv"));
-    EXPECT_NE(readText(output / "alpha.csv").find("\"Changed, Alpha\""), std::string::npos);
-    EXPECT_TRUE(read.workspace->changedPaths().empty());
-
-    const auto secondWrite = WorkspaceWriter{}.writeChanged(*read.workspace, output);
-    EXPECT_TRUE(secondWrite.ok());
-    EXPECT_TRUE(secondWrite.writtenPaths.empty());
-}
-
-TEST(SpiceTradeWorkspace, FailsWholeImportForInvalidMissingOrUnsafeRequests)
-{
-    TemporaryDirectory temp{};
-    writeBytes(temp.path / "valid.csv", "A,B\r\n1,2\r\n");
-    writeBytes(temp.path / "invalid.csv", "A,B\r\n1\r\n");
-
-    const std::array<std::filesystem::path, 3U> requested{
-        "valid.csv",
-        "invalid.csv",
-        "missing.csv",
-    };
-    const auto invalidBatch = WorkspaceReader{}.read(temp.path, requested);
-    EXPECT_FALSE(invalidBatch.ok());
-    EXPECT_FALSE(invalidBatch.workspace.has_value());
-
-    const std::array<std::filesystem::path, 1U> unsafe{ std::filesystem::path("..") / "escape.csv" };
-    const auto unsafeBatch = WorkspaceReader{}.read(temp.path, unsafe);
-    EXPECT_FALSE(unsafeBatch.ok());
-    EXPECT_FALSE(unsafeBatch.workspace.has_value());
-}
-
-TEST(SpiceTradeWorkspace, LeavesDocumentDirtyWhenOutputFails)
-{
-    TemporaryDirectory temp{};
-    const auto blockedRoot = temp.path / "not_a_directory";
-    writeBytes(blockedRoot, "blocking file");
-
-    Workspace workspace{};
-    workspace.documents.push_back(TrackedDocument{
-        .relativePath = "dirty.csv",
-        .baseline = CsvDocument{ .headers = { "A" }, .rows = { { "1" } } },
-        .current = CsvDocument{ .headers = { "A" }, .rows = { { "2" } } },
-        .format = CsvFormat{},
-    });
-
-    const auto write = WorkspaceWriter{}.writeChanged(workspace, blockedRoot);
-    EXPECT_FALSE(write.ok());
-    EXPECT_TRUE(write.writtenPaths.empty());
-    EXPECT_TRUE(workspace.documents.front().changed());
-}
-
-TEST(SpiceTradeAlx500CodecCorpus, RepoReferenceCsvFilesParseAndSemanticallyRoundTrip)
-{
-    const auto dataRoot = referenceCorpusRoot();
-    if (dataRoot.empty()) {
-        GTEST_SKIP() << "Private ALX 5.0.0 reference corpus is unavailable";
-    }
-
-    std::vector<std::filesystem::path> csvFiles{};
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(dataRoot)) {
-        if (entry.is_regular_file() && entry.path().extension() == ".csv") {
-            csvFiles.push_back(entry.path());
-        }
-    }
-    std::sort(csvFiles.begin(), csvFiles.end());
-
-    ASSERT_EQ(csvFiles.size(), 282U);
-    for (const auto& csvFile : csvFiles) {
-        const auto parsed = CsvReader{}.readFile(csvFile);
-        ASSERT_TRUE(parsed.ok()) << csvFile.string();
-
-        const auto written = CsvWriter{}.write(*parsed.document, parsed.format);
-        ASSERT_TRUE(written.ok()) << csvFile.string();
-
-        const auto reparsed = CsvReader{}.parse(written.bytes, csvFile.filename());
-        ASSERT_TRUE(reparsed.ok()) << csvFile.string();
-        EXPECT_EQ(reparsed.document, parsed.document) << csvFile.string();
-        EXPECT_EQ(reparsed.format, parsed.format) << csvFile.string();
-    }
+    const auto corpus=corpusRoot(); if(corpus.empty()) GTEST_SKIP(); const std::array requested{AlxTableKind::Enemy,AlxTableKind::EnemyTask};
+    const auto result=AlxDatasetImporter{}.importDirectory(corpus/"does-not-exist",requested,{.localeHint=AlxLocale::UnitedStates});
+    EXPECT_FALSE(result.ok()); EXPECT_FALSE(result.dataset); EXPECT_TRUE(result.metadata.empty());
 }
 
 } // namespace

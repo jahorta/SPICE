@@ -66,7 +66,7 @@ Support varies by format. Some formats have semantic editors and writers, while 
 | `.sct`           | `SpiceSCT`    | Parses scripts and canonically rebuilds known structures; opcode semantics remain incomplete.                                      |
 | `.sml` / `.sst`  | `SpiceSstSml` | Provides endian-aware read-only parsing and research exports for paired GameCube and Dreamcast battle-stage files.                 |
 | `.std`           | `SpiceStd`    | Parses big- and little-endian battle action and entry tables and rewrites fields in the source endian.                            |
-| ALX 5.0.0 `.csv` | `SpiceTrade`  | Provides typed interchange for `enemy.csv`, `enemyencounter.csv`, and `enemyevent.csv` only.                                       |
+| ALX 5.0.0 `.csv` | `SpiceTrade`  | Atomically imports 15 whitelisted ALX tables into typed, editable semantic models with stable identities and derived views.        |
 
 ## Applications and supporting projects
 
