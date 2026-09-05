@@ -1,6 +1,7 @@
 #include "../Compression/Aklz.h"
 #include "../SpiceGvm/Encoding/GvrEncoder.h"
 #include "../SpiceMll/SpiceMll.h"
+#include "CorpusTestSupport.h"
 
 #include <gtest/gtest.h>
 
@@ -593,6 +594,10 @@ TEST(SpiceMllParserRealFiles, UsKnownMllCanBeOpenedAsResearchProbe) {
 }
 
 TEST(SpiceMllParserRealFiles, RegionalMllCorpusDecodedRoundTripsThroughExporter) {
+    if (!spice::tests::corpusTestsEnabled(spice::tests::CorpusFileType::Mll)) {
+        GTEST_SKIP() << spice::tests::corpusTestsOptInMessage(spice::tests::CorpusFileType::Mll);
+    }
+
     const auto roots = regionalDiscRoots();
     if (roots.empty()) {
         GTEST_SKIP() << "No regional Skies of Arcadia Legends dumps are present.";

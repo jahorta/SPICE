@@ -1,5 +1,5 @@
 #include "SpicePvm/SpicePvm.h"
-#include "MldCorpusTestSupport.h"
+#include "CorpusTestSupport.h"
 
 #include <gtest/gtest.h>
 
@@ -892,8 +892,8 @@ TEST(SpicePvmCorpus, DecodesKnownEuDisc2RectangleTwiddledTexturesReadOnly)
 
 TEST(SpicePvmCorpus, DecodesRepresentativeEuAndUsDreamcastSourcesReadOnly)
 {
-    if (!spice::tests::corpusTestsEnabled()) {
-        GTEST_SKIP() << spice::tests::kCorpusTestsOptInMessage;
+    if (!spice::tests::corpusTestsEnabled(spice::tests::CorpusFileType::Pvm)) {
+        GTEST_SKIP() << spice::tests::corpusTestsOptInMessage(spice::tests::CorpusFileType::Pvm);
     }
 
     const std::filesystem::path euRoot = R"(D:\SoADC\SoA(Eu)Disc1Assets)";

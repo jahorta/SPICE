@@ -1,5 +1,6 @@
 #include "../Compression/Aklz.h"
 #include "../SpiceEct/SpiceEct.h"
+#include "CorpusTestSupport.h"
 
 #include <gtest/gtest.h>
 
@@ -372,6 +373,10 @@ TEST(SpiceEctWriter, RejectsUnrepresentableIr) {
 }
 
 TEST(SpiceEctRealCorpus, AllUsDreamcastAndGameCubeFilesShareSemanticIrAndRoundTrip) {
+    if (!spice::tests::corpusTestsEnabled(spice::tests::CorpusFileType::Ect)) {
+        GTEST_SKIP() << spice::tests::corpusTestsOptInMessage(spice::tests::CorpusFileType::Ect);
+    }
+
     const auto gameCubeRoot = gameCubeUsFieldRoot();
     const auto dreamcastRoot = dreamcastUsFieldRoot();
     if (gameCubeRoot.empty() || dreamcastRoot.empty()) {
