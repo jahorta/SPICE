@@ -970,7 +970,7 @@ TEST(SpiceMixDocuments, SstSmlSessionKeepsEmbeddedMldFailureNonFatal) {
     const auto records = opened.session->records();
     ASSERT_EQ(records.size(), 1U);
     EXPECT_FALSE(records.front().embeddedMldParsed);
-    EXPECT_EQ(records.front().embeddedMldParseStatus, "Failed");
+    EXPECT_EQ(records.front().embeddedMldParseStatus, "Opaque");
     EXPECT_EQ(opened.session->overview().embeddedMldFailedCount, 1U);
     EXPECT_FALSE(opened.session->diagnostics().empty());
 }

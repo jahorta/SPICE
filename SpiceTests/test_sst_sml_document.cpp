@@ -1,8 +1,11 @@
 #include "../Compression/Aklz.h"
 #include "../SpiceRoot/Binary/EndianWriter.h"
+#include "../SpiceRoot/Binary/EndianReader.h"
+#include "../SpiceMLD/MldBlenderIrProjector.h"
 #include "../SpiceSstSml/SstSmlDocumentImporter.h"
 #include "../SpiceSstSml/SstSmlDocumentValidator.h"
 #include "../SpiceSstSml/SstSmlDocumentAnalysis.h"
+#include "../SpiceSstSml/SstSmlDocumentMaterialization.h"
 #include "../SpiceSstSml/SstSmlExport.h"
 
 #include <gtest/gtest.h>
@@ -19,8 +22,45 @@ using spice::root::Endian;
 using spice::root::EndianSpanWriter;
 using namespace spice::sstsml;
 
-std::pair<std::vector<std::uint8_t>, std::vector<std::uint8_t>> makePair(Endian endian) {
-    std::vector<std::uint8_t> sml(0x1CU, 0U);
+std::vector<std::uint8_t> makeMinimalMld(const Endian endian) {
+    std::vector<std::uint8_t> bytes(0x340U, 0xCDU);
+    EndianSpanWriter writer(bytes, endian);
+    writer.write_u32_at(0x00U, 1U);
+    writer.write_u32_at(0x04U, 0x20U);
+    writer.write_u32_at(0x08U, 0x108U);
+    writer.write_u32_at(0x0CU, 0x180U);
+    writer.write_u32_at(0x10U, 0x320U);
+    writer.write_u32_at(0x20U, 7U);
+    writer.write_u32_at(0x24U, 9U);
+    writer.write_u32_at(0x28U, 0x100U);
+    writer.write_u32_at(0x2CU, 0x108U);
+    writer.write_u32_at(0x30U, 0x108U);
+    writer.write_u32_at(0x34U, 0x118U);
+    writer.write_u32_at(0x38U, 0x120U);
+    writer.write_u32_at(0x3CU, 0x128U);
+    writer.write_u32_at(0x40U, 0U);
+    std::fill(bytes.begin() + 0x44U, bytes.begin() + 0x58U, 0U);
+    const std::string name = "stage";
+    std::copy(name.begin(), name.end(), bytes.begin() + 0x44U);
+    writer.write_f32_at(0x7CU, 1.0F);
+    writer.write_f32_at(0x80U, 1.0F);
+    writer.write_f32_at(0x84U, 1.0F);
+    writer.write_u32_at(0x100U, 0U);
+    writer.write_u32_at(0x108U, 2U);
+    writer.write_u32_at(0x10CU, 11U);
+    writer.write_u32_at(0x110U, 22U);
+    writer.write_u32_at(0x118U, 0U);
+    writer.write_u32_at(0x120U, 0U);
+    writer.write_u32_at(0x128U, 0U);
+    writer.write_u32_at(0x320U, 0U);
+    return bytes;
+}
+
+std::pair<std::vector<std::uint8_t>, std::vector<std::uint8_t>> makePair(
+    const Endian endian, std::span<const std::uint8_t> embeddedMld = {}) {
+    const std::array<std::uint8_t, 4U> invalidMld{ 'M', 'L', 'D', '!' };
+    if (embeddedMld.empty()) embeddedMld = invalidMld;
+    std::vector<std::uint8_t> sml(0x18U + embeddedMld.size(), 0U);
     EndianSpanWriter smlWriter(sml, endian);
     smlWriter.write_u16_at(0U, 1U);
     smlWriter.write_u16_at(2U, 0xFFFFU);
@@ -28,12 +68,9 @@ std::pair<std::vector<std::uint8_t>, std::vector<std::uint8_t>> makePair(Endian 
     smlWriter.write_u16_at(6U, 0xFFFFU);
     smlWriter.write_u32_at(8U, 0U);
     smlWriter.write_u32_at(0x0CU, 0x18U);
-    smlWriter.write_u32_at(0x10U, 4U);
+    smlWriter.write_u32_at(0x10U, static_cast<std::uint32_t>(embeddedMld.size()));
     smlWriter.write_u32_at(0x14U, 0xFFFFFFFFU);
-    sml[0x18U] = 'M';
-    sml[0x19U] = 'L';
-    sml[0x1AU] = 'D';
-    sml[0x1BU] = '!';
+    std::copy(embeddedMld.begin(), embeddedMld.end(), sml.begin() + 0x18U);
 
     constexpr std::size_t blockOffset = 0x10U;
     constexpr std::size_t payloadSize = 0x4CU;
@@ -73,6 +110,45 @@ std::pair<std::vector<std::uint8_t>, std::vector<std::uint8_t>> makePair(Endian 
     sst[payloadOffset + 0x44U] = 2U;
     for (std::size_t index = 0U; index < 81U; ++index) {
         sst[payloadOffset + payloadSize + index] = static_cast<std::uint8_t>(index % 3U);
+    }
+    return { std::move(sml), std::move(sst) };
+}
+
+std::pair<std::vector<std::uint8_t>, std::vector<std::uint8_t>> makeLightingPair(const Endian endian) {
+    auto basePair = makePair(endian);
+    auto sml = std::move(basePair.first);
+    constexpr std::size_t blockOffset = 0x10U;
+    constexpr std::size_t payloadSize = 0xD0U;
+    constexpr std::size_t payloadOffset = blockOffset + 4U + 0x10U + 0x10U;
+    std::vector<std::uint8_t> sst(payloadOffset + payloadSize + 81U, 0U);
+    EndianSpanWriter writer(sst, endian);
+    writer.write_u16_at(0U, 1U);
+    writer.write_u16_at(2U, 0xFFFFU);
+    writer.write_u16_at(4U, 1U);
+    writer.write_u16_at(6U, 0xFFFFU);
+    writer.write_u32_at(8U, 0U);
+    writer.write_u32_at(0x0CU, blockOffset);
+    writer.write_u32_at(blockOffset, 1U);
+    writer.write_i16_at(blockOffset + 4U, 1);
+    writer.write_i16_at(blockOffset + 6U, 0);
+    const auto sentinelOffset = blockOffset + 20U;
+    writer.write_i16_at(sentinelOffset, -1);
+    writer.write_u32_at(sentinelOffset + 4U, 0xFFFFFFFFU);
+    writer.write_u32_at(sentinelOffset + 8U, 0xFFFFFFFFU);
+    writer.write_u32_at(sentinelOffset + 12U, 0xFFFFFFFFU);
+    writer.write_i8_at(payloadOffset, 4);
+    writer.write_i16_at(payloadOffset + 2U, 2);
+    writer.write_u32_at(payloadOffset + 4U, 0x60000000U);
+    writer.write_i16_at(payloadOffset + 8U, 3);
+    writer.write_f32_at(payloadOffset + 0x0CU, 1.0F);
+    writer.write_f32_at(payloadOffset + 0x30U, 0.25F);
+    writer.write_f32_at(payloadOffset + 0x3CU, 0.5F);
+    writer.write_f32_at(payloadOffset + 0x48U, 0.75F);
+    writer.write_f32_at(payloadOffset + 0x4CU, 1.25F);
+    writer.write_u32_at(payloadOffset + 0x64U, 0x12345678U);
+    writer.write_i8_at(payloadOffset + 0x68U, -1);
+    for (std::size_t index = 0U; index < 81U; ++index) {
+        sst[payloadOffset + payloadSize + index] = static_cast<std::uint8_t>(index % 4U);
     }
     return { std::move(sml), std::move(sst) };
 }
@@ -123,6 +199,13 @@ TEST(SpiceSstSmlDocument, ImportsEquivalentTypedSemanticsForBothEndianModes) {
     EXPECT_EQ(analysis.commandTypeHistogram[0], expectedHistogramEntry);
     EXPECT_EQ(analysis.commands.size(), 1U);
     EXPECT_EQ(analysis.commands[0].fields.size(), bigCommand.fields.size());
+    const auto rebuiltBig = materializeCommandPayload(bigCommand, Endian::Big);
+    const auto rebuiltLittle = materializeCommandPayload(littleCommand, Endian::Little);
+    ASSERT_TRUE(rebuiltBig.ok());
+    ASSERT_TRUE(rebuiltLittle.ok());
+    EXPECT_EQ(rebuiltBig.bytes, (std::vector<std::uint8_t>(bigSst.begin() + 0x34U, bigSst.begin() + 0x80U)));
+    EXPECT_EQ(rebuiltLittle.bytes,
+        (std::vector<std::uint8_t>(littleSst.begin() + 0x34U, littleSst.begin() + 0x80U)));
 }
 
 TEST(SpiceSstSmlDocument, ImportsAklzWrappedPairAndRecordsReceipt) {
@@ -137,6 +220,72 @@ TEST(SpiceSstSmlDocument, ImportsAklzWrappedPairAndRecordsReceipt) {
     EXPECT_EQ(imported.receipt.sst.wrapper, SstSmlSourceWrapper::Aklz);
     EXPECT_EQ(imported.receipt.sml.rawSize, compressedSml.bytes.size());
     EXPECT_EQ(imported.receipt.sml.decodedSize, sml.size());
+}
+
+TEST(SpiceSstSmlDocument, OwnsDecodedEmbeddedMldAndKeysItsImportReceipt) {
+    for (const auto endian : { Endian::Big, Endian::Little }) {
+        const auto sourceMld = makeMinimalMld(endian);
+        const auto [sml, sst] = makePair(endian, sourceMld);
+        const auto imported = SstSmlDocumentImporter::importBytes(sml, sst);
+        ASSERT_TRUE(imported.ok());
+        ASSERT_TRUE(imported.document.has_value());
+        const auto& resource = imported.document->members.front().sml.resource;
+        const auto* mld = std::get_if<spice::mld::MldDocument>(&resource.content);
+        ASSERT_NE(mld, nullptr);
+        ASSERT_EQ(mld->entries.size(), 1U);
+        EXPECT_EQ(mld->entries.front().functionName, "stage");
+        const auto* nestedReceipt = imported.receipt.embeddedMld(resource.id);
+        ASSERT_NE(nestedReceipt, nullptr);
+        EXPECT_EQ(nestedReceipt->endian, endian);
+        const auto materialized = materializeEmbeddedResource(resource, imported.receipt);
+        ASSERT_TRUE(materialized.ok());
+        const auto reparsed = spice::mld::MldDocumentImporter::importBytes(materialized.bytes);
+        ASSERT_TRUE(reparsed.ok());
+        EXPECT_EQ(reparsed.document->entries.front().functionName, mld->entries.front().functionName);
+        EXPECT_TRUE(SstSmlDocumentValidator::validate(*imported.document, &imported.receipt).ok());
+    }
+}
+
+TEST(SpiceSstSmlDocument, EmbeddedMldSemanticEditSurvivesMaterialization) {
+    const auto sourceMld = makeMinimalMld(Endian::Big);
+    const auto [sml, sst] = makePair(Endian::Big, sourceMld);
+    const auto imported = SstSmlDocumentImporter::importBytes(sml, sst);
+    ASSERT_TRUE(imported.ok());
+    auto document = *imported.document;
+    auto& resource = document.members.front().sml.resource;
+    auto& mld = std::get<spice::mld::MldDocument>(resource.content);
+    mld.entries.front().functionName = "edited";
+    const auto materialized = materializeEmbeddedResource(resource, imported.receipt);
+    ASSERT_TRUE(materialized.ok());
+    const auto reparsed = spice::mld::MldDocumentImporter::importBytes(materialized.bytes);
+    ASSERT_TRUE(reparsed.ok());
+    EXPECT_EQ(reparsed.document->entries.front().functionName, "edited");
+}
+
+TEST(SpiceSstSmlDocument, ConstructedEmbeddedMldProjectsWithoutReceiptButExtractionNeedsTarget) {
+    spice::mld::MldDocument mld{};
+    spice::mld::MldEntry entry{};
+    entry.id = spice::mld::MldEntryId{ 1U };
+    entry.entryId = 42U;
+    entry.tableId = -7;
+    entry.functionName = "constructed";
+    mld.entries.push_back(entry);
+    mld.layout.push_back(entry.id);
+    SmlEmbeddedResource resource{ SmlEmbeddedResourceId{ 1U }, std::move(mld) };
+    const SstSmlDocumentImportReceipt emptyReceipt{};
+
+    EXPECT_TRUE(spice::mld::MldBlenderIrProjector::project(
+        std::get<spice::mld::MldDocument>(resource.content)).ok());
+    EXPECT_FALSE(materializeEmbeddedResource(resource, emptyReceipt).ok());
+    const auto extracted = materializeEmbeddedResource(resource, emptyReceipt,
+        spice::mld::MldWriteTarget{
+            spice::mld::MldPlatform::Dreamcast,
+            spice::mld::MldWrapper::Raw,
+        });
+    ASSERT_TRUE(extracted.ok());
+    const auto reparsed = spice::mld::MldDocumentImporter::importBytes(extracted.bytes);
+    ASSERT_TRUE(reparsed.ok());
+    EXPECT_EQ(reparsed.document->entries.front().functionName, "constructed");
 }
 
 TEST(SpiceSstSmlDocument, RecordsSha256ForBothOriginalInputs) {
@@ -180,13 +329,13 @@ TEST(SpiceSstSmlDocument, RetainsUnknownCommandBodyAsExplicitOpaqueTail) {
     const auto& block = imported.document->members[0].sst.commandBlock;
     ASSERT_EQ(block.commands.size(), 1U);
     EXPECT_FALSE(block.commands[0].payloadSpanKnown);
-    EXPECT_TRUE(block.commands[0].payloadBytes.empty());
+    EXPECT_TRUE(block.commands[0].opaquePayloadFragments.empty());
     EXPECT_FALSE(block.battleGrid.has_value());
     ASSERT_TRUE(block.trailingOpaque.has_value());
     EXPECT_EQ(block.trailingOpaque->bytes.size(), 157U);
 }
 
-TEST(SpiceSstSmlDocument, ValidatorRejectsDivergentTypedPlacement) {
+TEST(SpiceSstSmlDocument, EditedSpecializedPlacementMaterializesCanonically) {
     const auto [sml, sst] = makePair(Endian::Big);
     const auto imported = SstSmlDocumentImporter::importBytes(sml, sst);
     ASSERT_TRUE(imported.ok());
@@ -194,10 +343,61 @@ TEST(SpiceSstSmlDocument, ValidatorRejectsDivergentTypedPlacement) {
     auto& placement = *document.members[0].sst.commandBlock.commands[0].placement;
     placement.positionX += 1.0F;
     const auto validation = SstSmlDocumentValidator::validate(document);
+    ASSERT_TRUE(validation.ok());
+    const auto payload = materializeCommandPayload(
+        document.members[0].sst.commandBlock.commands[0], Endian::Big);
+    ASSERT_TRUE(payload.ok());
+    EXPECT_FLOAT_EQ(spice::root::EndianReader(payload.bytes, Endian::Big).read_f32(0x1CU), 2.25F);
+}
+
+TEST(SpiceSstSmlDocument, SpecializedLightingOwnsAndMaterializesBothRows) {
+    for (const auto endian : { Endian::Big, Endian::Little }) {
+        const auto [sml, sst] = makeLightingPair(endian);
+        const auto imported = SstSmlDocumentImporter::importBytes(sml, sst);
+        ASSERT_TRUE(imported.ok());
+        const auto& command = imported.document->members.front().sst.commandBlock.commands.front();
+        EXPECT_TRUE(command.fields.empty());
+        ASSERT_EQ(command.lightingRows.size(), 2U);
+        EXPECT_FALSE(command.lightingRows.front().sentinel);
+        EXPECT_TRUE(command.lightingRows.back().sentinel);
+        const auto rebuilt = materializeCommandPayload(command, endian);
+        ASSERT_TRUE(rebuilt.ok());
+        EXPECT_EQ(rebuilt.bytes,
+            (std::vector<std::uint8_t>(sst.begin() + 0x34U, sst.begin() + 0x104U)));
+    }
+}
+
+TEST(SpiceSstSmlDocument, ValidatorRejectsOverlappingSemanticAndOpaqueCommandOwnership) {
+    const auto [sml, sst] = makePair(Endian::Big);
+    const auto imported = SstSmlDocumentImporter::importBytes(sml, sst);
+    ASSERT_TRUE(imported.ok());
+    auto document = *imported.document;
+    auto& command = document.members[0].sst.commandBlock.commands[0];
+    command.opaquePayloadFragments.push_back({
+        document.allocateOpaqueBlockId(), 0x1CU, { 0U, 0U, 0U, 0U } });
+    const auto validation = SstSmlDocumentValidator::validate(document);
     EXPECT_FALSE(validation.ok());
     EXPECT_TRUE(std::any_of(validation.diagnostics.begin(), validation.diagnostics.end(), [](const auto& diagnostic) {
-        return diagnostic.message.find("placement disagrees") != std::string::npos;
+        return diagnostic.message.find("overlap") != std::string::npos;
     }));
+}
+
+TEST(SpiceSstSmlDocument, AllocatorsCoverEveryStableDocumentIdCategory) {
+    const auto [sml, sst] = makePair(Endian::Big);
+    const auto imported = SstSmlDocumentImporter::importBytes(sml, sst);
+    ASSERT_TRUE(imported.ok());
+    const auto& document = *imported.document;
+    EXPECT_GT(document.allocateStageMemberId().value, 1U);
+    EXPECT_GT(document.allocateSmlRecordId().value, 1U);
+    EXPECT_GT(document.allocateEmbeddedResourceId().value, 1U);
+    EXPECT_GT(document.allocateSstRecordId().value, 1U);
+    EXPECT_GT(document.allocateCommandBlockId().value, 1U);
+    EXPECT_GT(document.allocateCommandId().value, 1U);
+    EXPECT_GT(document.allocateCommandFieldId().value, 1U);
+    EXPECT_GT(document.allocatePlacementId().value, 1U);
+    EXPECT_EQ(document.allocateLightingRowId().value, 1U);
+    EXPECT_GT(document.allocateBattleGridTerrainId().value, 1U);
+    EXPECT_GT(document.allocateOpaqueBlockId().value, 1U);
 }
 
 TEST(SpiceSstSmlDocument, ValidatorRejectsDuplicateAndMissingLayoutOwnership) {
@@ -291,5 +491,9 @@ TEST(SpiceSstSmlDocument, ImportsUsGameCubeS001AcceptancePair) {
     }
     EXPECT_EQ(type0Count, 10U);
     EXPECT_EQ(type1Count, 1U);
-    EXPECT_TRUE(SstSmlDocumentValidator::validate(*imported.document).ok());
+    EXPECT_EQ(imported.receipt.embeddedMlds.size(), imported.document->members.size());
+    EXPECT_TRUE(std::all_of(imported.document->members.begin(), imported.document->members.end(), [](const auto& member) {
+        return std::holds_alternative<spice::mld::MldDocument>(member.sml.resource.content);
+    }));
+    EXPECT_TRUE(SstSmlDocumentValidator::validate(*imported.document, &imported.receipt).ok());
 }
