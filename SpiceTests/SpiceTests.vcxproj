@@ -82,7 +82,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)Sa3Dport;$(SolutionDir)third-party\googletest-1.17.0\googletest\include;$(SolutionDir)third-party\googletest-1.17.0\googletest;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)SpiceModeling;$(SolutionDir)third-party\googletest-1.17.0\googletest\include;$(SolutionDir)third-party\googletest-1.17.0\googletest;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -101,7 +101,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)Sa3Dport;$(SolutionDir)third-party\googletest-1.17.0\googletest\include;$(SolutionDir)third-party\googletest-1.17.0\googletest;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)SpiceModeling;$(SolutionDir)third-party\googletest-1.17.0\googletest\include;$(SolutionDir)third-party\googletest-1.17.0\googletest;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -160,11 +160,11 @@
     <ClCompile Include="..\SpiceGrinder\Cli\CliParser.cpp">
       <Link>SpiceGrinder\CliParser.cpp</Link>
     </ClCompile>
-    <ClCompile Include="test_sa3dport_stage1.cpp" />
-    <ClCompile Include="test_sa3dport_stage2.cpp" />
-    <ClCompile Include="test_sa3dport_stage3.cpp" />
-    <ClCompile Include="test_sa3dport_stage4.cpp" />
-    <ClCompile Include="test_sa3dport_stage5.cpp" />
+    <ClCompile Include="test_spice_modeling_stage1.cpp" />
+    <ClCompile Include="test_spice_modeling_stage2.cpp" />
+    <ClCompile Include="test_spice_modeling_stage3.cpp" />
+    <ClCompile Include="test_spice_modeling_stage4.cpp" />
+    <ClCompile Include="test_spice_modeling_stage5.cpp" />
     <ClCompile Include="test_spiceroot.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -187,7 +187,7 @@
     <ProjectReference Include="..\SpiceEct\SpiceEct.vcxproj">
       <Project>{81EF38D9-DF34-427B-A78A-73E38A14DAD8}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\Sa3Dport\Sa3Dport.vcxproj">
+    <ProjectReference Include="..\SpiceModeling\SpiceModeling.vcxproj">
       <Project>{DF6013F5-9B25-4250-A0F7-EAF86E7BE9D7}</Project>
     </ProjectReference>
     <ProjectReference Include="..\SpiceContentGraph\SpiceContentGraph.vcxproj">

@@ -1,10 +1,19 @@
 #include "../SpiceMLD/SpiceMLD.h"
+#include "../SpiceMLD/Export/MldFileExporter.h"
+#include "../SpiceMLD/Export/MldFileWriter.h"
+#include "../SpiceMLD/Export/MldEntryListJsonExporter.h"
+#include "../SpiceMLD/Model/MldGroundEditing.h"
+#include "../SpiceMLD/Model/TriangleMetadata.h"
+#include "../SpiceMLD/Patching/TriangleMetadataPatcher.h"
+#include "../SpiceMLD/Parsing/EntryHandlers.h"
+#include "../SpiceMLD/Parsing/MldParser.h"
+#include "../SpiceMLD/Parsing/Sa3dBlenderIrBuilder.h"
 #include "../SpiceMLD/Parsing/GobjParser.h"
 #include "../SpiceMLD/Parsing/GrndParser.h"
 #include "../SpiceGvm/SpiceGvm.h"
 #include "../SpicePvm/SpicePvm.h"
 #include "../Compression/Aklz.h"
-#include "../Sa3Dport/Sa3Dport.h"
+#include "../SpiceModeling/SpiceModeling.h"
 #include "MldCorpusTestSupport.h"
 
 #include <gtest/gtest.h>
@@ -781,18 +790,18 @@ TEST(MldParser, BuildsUniqueNodeAndCameraRelationsWithoutSelectingCameraBinding)
 
     ASSERT_EQ(file.motionRelations.size(), 3U);
     EXPECT_EQ(file.motionRelations[0].motionSlot, 0U);
-    EXPECT_EQ(file.motionRelations[0].motionKind, Sa3Dport::File::NinjaMotionKind::Node);
+    EXPECT_EQ(file.motionRelations[0].motionKind, spice::modeling::File::NinjaMotionKind::Node);
     EXPECT_EQ(file.motionRelations[0].scope,
         spice::mld::model::MldMotionRelationScope::SameEntryObjectList);
     EXPECT_EQ(file.motionRelations[0].status, spice::mld::model::MldMotionRelationStatus::Unique);
     ASSERT_EQ(file.motionRelations[0].targetCandidates.size(), 1U);
     EXPECT_TRUE(file.motionRelations[0].targetCandidates[0].compatible);
-    EXPECT_EQ(file.motionRelations[1].motionKind, Sa3Dport::File::NinjaMotionKind::Camera);
+    EXPECT_EQ(file.motionRelations[1].motionKind, spice::modeling::File::NinjaMotionKind::Camera);
     EXPECT_EQ(file.motionRelations[1].status, spice::mld::model::MldMotionRelationStatus::Camera);
     EXPECT_EQ(file.motionRelations[1].scope,
         spice::mld::model::MldMotionRelationScope::NoObjectTarget);
     EXPECT_TRUE(file.motionRelations[1].targetCandidates.empty());
-    EXPECT_EQ(file.motionRelations[2].motionKind, Sa3Dport::File::NinjaMotionKind::Shape);
+    EXPECT_EQ(file.motionRelations[2].motionKind, spice::modeling::File::NinjaMotionKind::Shape);
     EXPECT_EQ(file.motionRelations[2].status, spice::mld::model::MldMotionRelationStatus::Unique);
     ASSERT_EQ(file.animationBindings.size(), 2U);
     EXPECT_EQ(file.animationBindings[0].motionAddress, 0x300U);
@@ -815,7 +824,7 @@ TEST(MldParser, BuildsUniqueNodeAndCameraRelationsWithoutSelectingCameraBinding)
     EXPECT_EQ(*shapeMotion->second.variants[0].targetLayout.lanes[0].vertex_count, 3U);
     EXPECT_EQ(*shapeMotion->second.variants[0].targetLayout.lanes[0].normal_count, 3U);
     EXPECT_FALSE(nodeMotion->second.variants[0].shortRot);
-    EXPECT_EQ(nodeMotion->second.structure.status, Sa3Dport::File::NinjaMotionParseStatus::Complete);
+    EXPECT_EQ(nodeMotion->second.structure.status, spice::modeling::File::NinjaMotionParseStatus::Complete);
     EXPECT_TRUE(nodeMotion->second.structure.pof0_range.has_value());
 
     const auto projected = parser.parse(bytes);
@@ -895,7 +904,7 @@ TEST(MldParser, UsesStructuralOnlyScopeForUnknownMotionKinds) {
     const auto file = MldParser{}.parseFile(makeWrappedObjectMldWithMotions(objects, motions));
 
     ASSERT_EQ(file.motionRelations.size(), 1U);
-    EXPECT_EQ(file.motionRelations[0].motionKind, Sa3Dport::File::NinjaMotionKind::Unknown);
+    EXPECT_EQ(file.motionRelations[0].motionKind, spice::modeling::File::NinjaMotionKind::Unknown);
     EXPECT_EQ(file.motionRelations[0].scope, spice::mld::model::MldMotionRelationScope::StructuralOnly);
     EXPECT_EQ(file.motionRelations[0].status,
         spice::mld::model::MldMotionRelationStatus::NoCompatibleTarget);
@@ -913,11 +922,11 @@ TEST(Sa3dBlenderIrBuilder, ProjectsNcamPositionAndTargetUnderOwningEntry) {
     entry.tableIndex = 7U;
     parsed.rawEntries.push_back(entry);
 
-    auto motion = std::make_shared<Sa3Dport::Animation::Motion>();
+    auto motion = std::make_shared<spice::modeling::Animation::Motion>();
     motion->declared_frame_count = 20U;
-    motion->interpolation_mode = Sa3Dport::Animation::InterpolationMode::Linear;
-    motion->keyframes[0U].position.emplace(3U, Sa3Dport::Structs::Vector3{1.0F, 2.0F, 3.0F});
-    motion->keyframes[0U].target.emplace(5U, Sa3Dport::Structs::Vector3{4.0F, 5.0F, 6.0F});
+    motion->interpolation_mode = spice::modeling::Animation::InterpolationMode::Linear;
+    motion->keyframes[0U].position.emplace(3U, spice::modeling::Structs::Vector3{1.0F, 2.0F, 3.0F});
+    motion->keyframes[0U].target.emplace(5U, spice::modeling::Structs::Vector3{4.0F, 5.0F, 6.0F});
     motion->keyframes[0U].roll.emplace(5U, 0.25F);
     parsed.cameraMotions.push_back(spice::mld::parsing::ParsedMldCameraMotion{
         .sourceEntryId = 12U,
@@ -961,8 +970,8 @@ TEST(Sa3dBlenderIrBuilder, OmitsNcamWithoutBothSpatialChannels) {
     entry.tableIndex = 7U;
     parsed.rawEntries.push_back(entry);
 
-    auto motion = std::make_shared<Sa3Dport::Animation::Motion>();
-    motion->keyframes[0U].position.emplace(0U, Sa3Dport::Structs::Vector3{1.0F, 2.0F, 3.0F});
+    auto motion = std::make_shared<spice::modeling::Animation::Motion>();
+    motion->keyframes[0U].position.emplace(0U, spice::modeling::Structs::Vector3{1.0F, 2.0F, 3.0F});
     parsed.cameraMotions.push_back(spice::mld::parsing::ParsedMldCameraMotion{
         .sourceEntryId = 12U,
         .tableIndex = 7U,
@@ -1174,7 +1183,7 @@ TEST(MldParser, MarksShapeTargetUnavailableWhenItsAttachRepresentationIsUnsuppor
 
     ASSERT_EQ(file.motionRelations.size(), 1U);
     const auto& relation = file.motionRelations[0];
-    EXPECT_EQ(relation.motionKind, Sa3Dport::File::NinjaMotionKind::Shape);
+    EXPECT_EQ(relation.motionKind, spice::modeling::File::NinjaMotionKind::Shape);
     EXPECT_EQ(relation.status, spice::mld::model::MldMotionRelationStatus::TargetUnavailable);
     ASSERT_EQ(relation.targetCandidates.size(), 1U);
     EXPECT_FALSE(relation.targetCandidates[0].targetAvailable);

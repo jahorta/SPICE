@@ -1,6 +1,10 @@
 #include "../SpiceMLD/SpiceMLD.h"
+#include "../SpiceMLD/Export/MldFileWriter.h"
+#include "../SpiceMLD/Model/MldGroundEditing.h"
+#include "../SpiceMLD/Parsing/MldParser.h"
+#include "../SpiceMLD/Parsing/Sa3dBlenderIrBuilder.h"
 #include "../Compression/Aklz.h"
-#include "../Sa3Dport/Sa3Dport.h"
+#include "../SpiceModeling/SpiceModeling.h"
 
 #include <gtest/gtest.h>
 
@@ -548,13 +552,13 @@ TEST(MldCanonical, WriterRejectsReplacedReadOnlySa3dModel) {
 
 TEST(MldCanonical, WriterRejectsReplacedReadOnlySa3dMotion) {
     auto file = MldParser{}.parseBytes(makeBaseMld());
-    const auto original = std::make_shared<const Sa3Dport::Animation::Motion>();
+    const auto original = std::make_shared<const spice::modeling::Animation::Motion>();
     spice::mld::model::MldMotionResource resource{};
     resource.sourceAddress = 0x200U;
     resource.blockOffset = 0x200U;
     resource.blockSize = 0x20U;
     resource.variants.push_back(spice::mld::model::MldMotionVariant{
-        .motion = std::make_shared<const Sa3Dport::Animation::Motion>(),
+        .motion = std::make_shared<const spice::modeling::Animation::Motion>(),
         .originalMotion = original,
     });
     file.motionResources.emplace(resource.sourceAddress, std::move(resource));
@@ -674,4 +678,213 @@ TEST(GrndTranslationCorpus, DreamcastA103bArchivesRetainNonzeroSetTranslationsAn
     EXPECT_GT(translatedTriangles, 0U);
     std::cout << "Dreamcast A103B translated sets=" << nonzeroTranslations
               << " declared triangles=" << translatedTriangles << '\n';
+}
+
+TEST(MldDocument, ImportsNeutralEditableStructureAndWritesWithExplicitTarget) {
+    const auto source = makeBaseMld();
+    auto imported = spice::mld::MldDocumentImporter::importBytes(source);
+    ASSERT_TRUE(imported.ok());
+    ASSERT_TRUE(imported.document.has_value());
+    EXPECT_EQ(imported.receipt.platform, spice::mld::MldPlatform::GameCube);
+    EXPECT_EQ(imported.receipt.wrapper, spice::mld::MldWrapper::Raw);
+    ASSERT_EQ(imported.document->entries.size(), 1U);
+    EXPECT_TRUE(imported.document->entries.front().id);
+    EXPECT_EQ(imported.document->allocateEntryId().value, 2U);
+    EXPECT_FALSE(imported.document->layout.empty());
+
+    const auto projection = spice::mld::MldBlenderIrProjector::project(*imported.document);
+    EXPECT_TRUE(projection.ok());
+
+    imported.document->entries.front().functionName = "edited";
+    const spice::mld::MldWriteTarget target{
+        .platform = spice::mld::MldPlatform::GameCube,
+        .wrapper = spice::mld::MldWrapper::Raw,
+    };
+    const auto validation = spice::mld::MldDocumentValidator::validate(
+        *imported.document, target, &imported.receipt);
+    ASSERT_TRUE(validation.ok());
+    const auto written = spice::mld::MldDocumentWriter::write(
+        *imported.document, target, &imported.receipt);
+    ASSERT_TRUE(written.ok());
+
+    const auto reparsed = spice::mld::MldDocumentImporter::importBytes(written.bytes);
+    ASSERT_TRUE(reparsed.ok());
+    ASSERT_TRUE(reparsed.document.has_value());
+    EXPECT_EQ(reparsed.document->entries.front().functionName, "edited");
+}
+
+TEST(MldDocument, RequiresReceiptForOpaquePreservingWrites) {
+    spice::mld::MldDocument document{};
+    document.entries.push_back({ .id = spice::mld::MldEntryId{ 1U } });
+    document.opaqueMembers.push_back({
+        .id = spice::mld::MldOpaqueMemberId{ 1U },
+        .role = "unknown",
+        .payload = { { 1U, 2U, 3U } },
+    });
+    document.layout.push_back(document.entries.front().id);
+    document.layout.push_back(document.opaqueMembers.front().id);
+    const auto result = spice::mld::MldDocumentWriter::write(document, {
+        .platform = spice::mld::MldPlatform::Dreamcast,
+        .wrapper = spice::mld::MldWrapper::Raw,
+    });
+    EXPECT_FALSE(result.ok());
+}
+
+TEST(MldDocument, ConstructivelyWritesFullyDecodedContentWithoutAReceipt) {
+    spice::mld::MldDocument document{};
+    spice::mld::MldEntry entry{};
+    entry.id = spice::mld::MldEntryId{ 1U };
+    entry.entryId = 42U;
+    entry.tableId = -7;
+    entry.functionName = "constructive";
+    document.entries.push_back(entry);
+    document.layout.push_back(entry.id);
+
+    const auto dreamcast = spice::mld::MldDocumentWriter::write(document, {
+        .platform = spice::mld::MldPlatform::Dreamcast,
+        .wrapper = spice::mld::MldWrapper::Raw,
+    });
+    ASSERT_TRUE(dreamcast.ok());
+    const auto dreamcastParsed = spice::mld::MldDocumentImporter::importBytes(dreamcast.bytes);
+    ASSERT_TRUE(dreamcastParsed.ok());
+    ASSERT_TRUE(dreamcastParsed.document.has_value());
+    ASSERT_EQ(dreamcastParsed.document->entries.size(), 1U);
+    EXPECT_EQ(dreamcastParsed.document->entries.front().entryId, 42U);
+    EXPECT_EQ(dreamcastParsed.document->entries.front().tableId, -7);
+    EXPECT_EQ(dreamcastParsed.document->entries.front().functionName, "constructive");
+
+    const auto gameCube = spice::mld::MldDocumentWriter::write(document, {
+        .platform = spice::mld::MldPlatform::GameCube,
+        .wrapper = spice::mld::MldWrapper::Aklz,
+    });
+    ASSERT_TRUE(gameCube.ok());
+    const auto gameCubeParsed = spice::mld::MldDocumentImporter::importBytes(gameCube.bytes);
+    ASSERT_TRUE(gameCubeParsed.ok());
+    ASSERT_TRUE(gameCubeParsed.document.has_value());
+    ASSERT_EQ(gameCubeParsed.document->entries.size(), 1U);
+    EXPECT_EQ(gameCubeParsed.document->entries.front().entryId, 42U);
+    EXPECT_EQ(gameCubeParsed.document->entries.front().tableId, -7);
+    EXPECT_EQ(gameCubeParsed.document->entries.front().functionName, "constructive");
+}
+
+TEST(MldDocument, EditsSourceNeutralGrndContentAndRebuildsIt) {
+    auto imported = spice::mld::MldDocumentImporter::importBytes(makeGrndMld());
+    ASSERT_TRUE(imported.ok());
+    ASSERT_TRUE(imported.document.has_value());
+    ASSERT_EQ(imported.document->grounds.size(), 1U);
+    auto* ground = std::get_if<spice::mld::MldGrndDocument>(&imported.document->grounds.front().payload);
+    ASSERT_NE(ground, nullptr);
+    ASSERT_EQ(ground->mesh.indices.size(), 3U);
+    const auto originalIndices = ground->mesh.indices;
+    ground->mesh.indices.insert(ground->mesh.indices.end(), originalIndices.begin(), originalIndices.end());
+    ground->mesh.triangleMetadata.push_back(ground->mesh.triangleMetadata.front());
+    ASSERT_FALSE(ground->cells.empty());
+    ground->cells.front().triangleIndices.push_back(1U);
+
+    const auto written = spice::mld::MldDocumentWriter::write(*imported.document, {
+        .platform = spice::mld::MldPlatform::GameCube,
+        .wrapper = spice::mld::MldWrapper::Raw,
+    }, &imported.receipt);
+    ASSERT_TRUE(written.ok());
+    const auto reparsed = spice::mld::MldDocumentImporter::importBytes(written.bytes);
+    ASSERT_TRUE(reparsed.ok());
+    ASSERT_TRUE(reparsed.document.has_value());
+    ASSERT_EQ(reparsed.document->grounds.size(), 1U);
+    const auto* rebuilt = std::get_if<spice::mld::MldGrndDocument>(&reparsed.document->grounds.front().payload);
+    ASSERT_NE(rebuilt, nullptr);
+    EXPECT_EQ(rebuilt->mesh.indices.size(), 6U);
+}
+
+TEST(MldDocument, ConstructivelyWritesAndRelocatesEditedTextureLists) {
+    spice::mld::MldDocument document{};
+    spice::mld::MldEntry entry{};
+    entry.id = spice::mld::MldEntryId{ 1U };
+    entry.entryId = 9U;
+    entry.textureList = spice::mld::MldTextureListId{ 1U };
+    document.entries.push_back(entry);
+    document.textureLists.push_back({
+        .id = spice::mld::MldTextureListId{ 1U },
+        .names = { "first", "second" },
+    });
+    document.layout = { entry.id, spice::mld::MldTextureListId{ 1U } };
+
+    const auto initial = spice::mld::MldDocumentWriter::write(document, {
+        .platform = spice::mld::MldPlatform::Dreamcast,
+        .wrapper = spice::mld::MldWrapper::Raw,
+    });
+    ASSERT_TRUE(initial.ok());
+    auto imported = spice::mld::MldDocumentImporter::importBytes(initial.bytes);
+    ASSERT_TRUE(imported.ok());
+    ASSERT_TRUE(imported.document.has_value());
+    ASSERT_EQ(imported.document->textureLists.size(), 1U);
+    EXPECT_EQ(imported.document->textureLists.front().names,
+        (std::vector<std::string>{ "first", "second" }));
+
+    imported.document->textureLists.front().names.front() = std::string(80U, 'x');
+    const auto edited = spice::mld::MldDocumentWriter::write(*imported.document, {
+        .platform = spice::mld::MldPlatform::Dreamcast,
+        .wrapper = spice::mld::MldWrapper::Raw,
+    }, &imported.receipt);
+    ASSERT_TRUE(edited.ok());
+    const auto reparsed = spice::mld::MldDocumentImporter::importBytes(edited.bytes);
+    ASSERT_TRUE(reparsed.ok());
+    ASSERT_TRUE(reparsed.document.has_value());
+    ASSERT_EQ(reparsed.document->textureLists.size(), 1U);
+    EXPECT_EQ(reparsed.document->textureLists.front().names.front(), std::string(80U, 'x'));
+    EXPECT_EQ(reparsed.document->textureLists.front().names.back(), "second");
+}
+
+TEST(MldDocumentCorpus, ImportsAndReemitsRequestedBattleModelsAcrossPlatformsAndRegions) {
+    struct Case {
+        std::filesystem::path path;
+        spice::mld::MldPlatform platform;
+    };
+    const std::array cases{
+        Case{ R"(D:\SoAGC\2002-12-19-gc-us-final_Skies_of_Arcadia_Legends\bchara\ma000.mld)", spice::mld::MldPlatform::GameCube },
+        Case{ R"(D:\SoAGC\2002-12-19-gc-us-final_Skies_of_Arcadia_Legends\bchara\ma001.mld)", spice::mld::MldPlatform::GameCube },
+        Case{ R"(D:\SoAGC\2002-12-19-gc-us-final_Skies_of_Arcadia_Legends\bchara\MB000.mld)", spice::mld::MldPlatform::GameCube },
+        Case{ R"(D:\SoAGC\2003-03-05-gc-eu-final_Skies_of_Arcadia_Legends\bchara\ma000.mld)", spice::mld::MldPlatform::GameCube },
+        Case{ R"(D:\SoAGC\2003-03-05-gc-eu-final_Skies_of_Arcadia_Legends\bchara\ma001.mld)", spice::mld::MldPlatform::GameCube },
+        Case{ R"(D:\SoAGC\2003-03-05-gc-eu-final_Skies_of_Arcadia_Legends\bchara\MB000.mld)", spice::mld::MldPlatform::GameCube },
+        Case{ R"(D:\SoAGC\2002-11-12-gc-jp-final_Eternal_Arcadia_Legends\bchara\ma000.mld)", spice::mld::MldPlatform::GameCube },
+        Case{ R"(D:\SoAGC\2002-11-12-gc-jp-final_Eternal_Arcadia_Legends\bchara\ma001.mld)", spice::mld::MldPlatform::GameCube },
+        Case{ R"(D:\SoAGC\2002-11-12-gc-jp-final_Eternal_Arcadia_Legends\bchara\MB000.mld)", spice::mld::MldPlatform::GameCube },
+        Case{ R"(D:\SoADC\SoA(Usa)Disc1Assets\BCHARA\MA000.MLD)", spice::mld::MldPlatform::Dreamcast },
+        Case{ R"(D:\SoADC\SoA(Usa)Disc1Assets\BCHARA\MA001.MLD)", spice::mld::MldPlatform::Dreamcast },
+        Case{ R"(D:\SoADC\SoA(Usa)Disc1Assets\BCHARA\MB000.MLD)", spice::mld::MldPlatform::Dreamcast },
+        Case{ R"(D:\SoADC\SoA(Eu)Disc1Assets\BCHARA\MA000.MLD)", spice::mld::MldPlatform::Dreamcast },
+        Case{ R"(D:\SoADC\SoA(Eu)Disc1Assets\BCHARA\MA001.MLD)", spice::mld::MldPlatform::Dreamcast },
+        Case{ R"(D:\SoADC\SoA(Eu)Disc1Assets\BCHARA\MB000.MLD)", spice::mld::MldPlatform::Dreamcast },
+        Case{ R"(D:\SoADC\SoA(JP)Disc1\Track 03\ETERNAL_ARCADIA_DISC1\BCHARA\MA000.MLD)", spice::mld::MldPlatform::Dreamcast },
+        Case{ R"(D:\SoADC\SoA(JP)Disc1\Track 03\ETERNAL_ARCADIA_DISC1\BCHARA\MA001.MLD)", spice::mld::MldPlatform::Dreamcast },
+        Case{ R"(D:\SoADC\SoA(JP)Disc1\Track 03\ETERNAL_ARCADIA_DISC1\BCHARA\MB000.MLD)", spice::mld::MldPlatform::Dreamcast },
+    };
+    if (std::any_of(cases.begin(), cases.end(), [](const auto& item) {
+            return !std::filesystem::exists(item.path);
+        })) {
+        GTEST_SKIP() << "The six requested battle-model corpus roots are not all available";
+    }
+
+    for (const auto& item : cases) {
+        SCOPED_TRACE(item.path.string());
+        const auto source = readBytes(item.path);
+        const auto imported = spice::mld::MldDocumentImporter::importBytes(source);
+        ASSERT_TRUE(imported.ok());
+        ASSERT_TRUE(imported.document.has_value());
+        EXPECT_EQ(imported.receipt.platform, item.platform);
+        const auto written = spice::mld::MldDocumentWriter::write(
+            *imported.document,
+            { .platform = item.platform, .wrapper = imported.receipt.wrapper },
+            &imported.receipt);
+        ASSERT_TRUE(written.ok());
+        if (item.platform == spice::mld::MldPlatform::GameCube) {
+            const auto sourceDecoded = spice::compression::aklz::decompress(source);
+            const auto writtenDecoded = spice::compression::aklz::decompress(written.bytes);
+            ASSERT_TRUE(sourceDecoded.ok());
+            ASSERT_TRUE(writtenDecoded.ok());
+            EXPECT_EQ(writtenDecoded.bytes, sourceDecoded.bytes);
+        } else {
+            EXPECT_EQ(written.bytes, source);
+        }
+    }
 }

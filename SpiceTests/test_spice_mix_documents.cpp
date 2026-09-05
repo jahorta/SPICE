@@ -881,7 +881,7 @@ TEST(SpiceMixDocuments, SstSmlSessionResolvesPairAndProjectsNestedInspection) {
     EXPECT_EQ(regularFileCount, 2U);
 }
 
-TEST(SpiceMixDocuments, MldEntryDetailsPreservePointersValidityValuesAndTextureNames) {
+TEST(SpiceMixDocuments, MldEntryDetailsExposeNeutralValuesStableIdsAndTextureNames) {
     TempDirectory temp{};
     auto bytes = makeTwoTextureMld();
     addDetailedEntryLists(bytes, false);
@@ -895,21 +895,12 @@ TEST(SpiceMixDocuments, MldEntryDetailsPreservePointersValidityValuesAndTextureN
     ASSERT_EQ(details.size(), 1U);
     const auto& detail = details.front();
     EXPECT_EQ(detail.summary.entryId, 7U);
-    EXPECT_EQ(detail.groundLinks.pointer, 0x200U);
-    EXPECT_TRUE(detail.groundLinks.valid);
     EXPECT_EQ(detail.groundLinks.values, (std::vector<std::uint32_t>{ 0U, 7U }));
-    EXPECT_EQ(detail.paramList2.pointer, 0x220U);
     EXPECT_EQ(detail.paramList2.values, (std::vector<std::uint32_t>{ 8U, 9U }));
-    EXPECT_EQ(detail.functionParameters.pointer, 0x240U);
     EXPECT_EQ(detail.functionParameters.values, (std::vector<std::uint32_t>{ 10U, 0U, 12U }));
-    EXPECT_EQ(detail.objectAddresses.pointer, 0x260U);
-    EXPECT_EQ(detail.objectAddresses.values, (std::vector<std::uint32_t>{ 0U, 0x180U }));
-    EXPECT_EQ(detail.groundAddresses.pointer, 0x280U);
-    EXPECT_EQ(detail.groundAddresses.values, (std::vector<std::uint32_t>{ 0x180U, 0U }));
-    EXPECT_EQ(detail.motionAddresses.pointer, 0x2A0U);
-    EXPECT_EQ(detail.motionAddresses.values, (std::vector<std::uint32_t>{ 0U, 0x180U, 0U }));
-    EXPECT_EQ(detail.textureNames.pointer, 0x2C0U);
-    EXPECT_TRUE(detail.textureNames.valid);
+    EXPECT_EQ(detail.objectIds.values, (std::vector<std::uint32_t>{ 0U, 1U }));
+    EXPECT_EQ(detail.groundIds.values, (std::vector<std::uint32_t>{ 1U, 0U }));
+    EXPECT_EQ(detail.motionIds.values, (std::vector<std::uint32_t>{ 0U, 1U, 0U }));
     EXPECT_EQ(detail.textureNames.values,
         (std::vector<std::string>{ "detail_first", "detail_second" }));
     EXPECT_FALSE(opened.session->dirty());
@@ -921,8 +912,6 @@ TEST(SpiceMixDocuments, MldEntryDetailsPreservePointersValidityValuesAndTextureN
     ASSERT_TRUE(malformedOpen.result.ok()) << malformedOpen.result.message;
     const auto malformedDetails = malformedOpen.session->entryDetails();
     ASSERT_EQ(malformedDetails.size(), 1U);
-    EXPECT_EQ(malformedDetails.front().groundLinks.pointer, 0xFFFFFFF0U);
-    EXPECT_FALSE(malformedDetails.front().groundLinks.valid);
     EXPECT_TRUE(malformedDetails.front().groundLinks.values.empty());
 }
 
@@ -945,13 +934,12 @@ TEST(SpiceMixDocuments, MldEntryDetailsRetainEquivalentListsAcrossPlatforms) {
     const auto dreamcastDetails = dreamcast.session->entryDetails();
     ASSERT_EQ(gameCubeDetails.size(), 1U);
     ASSERT_EQ(dreamcastDetails.size(), 1U);
-    EXPECT_EQ(gameCubeDetails.front().groundLinks.pointer, dreamcastDetails.front().groundLinks.pointer);
     EXPECT_EQ(gameCubeDetails.front().groundLinks.values, dreamcastDetails.front().groundLinks.values);
     EXPECT_EQ(gameCubeDetails.front().paramList2.values, dreamcastDetails.front().paramList2.values);
     EXPECT_EQ(gameCubeDetails.front().functionParameters.values, dreamcastDetails.front().functionParameters.values);
-    EXPECT_EQ(gameCubeDetails.front().objectAddresses.values, dreamcastDetails.front().objectAddresses.values);
-    EXPECT_EQ(gameCubeDetails.front().groundAddresses.values, dreamcastDetails.front().groundAddresses.values);
-    EXPECT_EQ(gameCubeDetails.front().motionAddresses.values, dreamcastDetails.front().motionAddresses.values);
+    EXPECT_EQ(gameCubeDetails.front().objectIds.values, dreamcastDetails.front().objectIds.values);
+    EXPECT_EQ(gameCubeDetails.front().groundIds.values, dreamcastDetails.front().groundIds.values);
+    EXPECT_EQ(gameCubeDetails.front().motionIds.values, dreamcastDetails.front().motionIds.values);
     EXPECT_EQ(gameCubeDetails.front().textureNames.values, dreamcastDetails.front().textureNames.values);
 }
 

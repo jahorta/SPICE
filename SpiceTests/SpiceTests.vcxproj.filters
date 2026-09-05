@@ -39,11 +39,11 @@
     <ClCompile Include="test_sct_scpt_v2.cpp" />
     <ClCompile Include="test_sst_sml_document.cpp" />
     <ClCompile Include="test_std_parser.cpp" />
-    <ClCompile Include="test_sa3dport_stage1.cpp" />
-    <ClCompile Include="test_sa3dport_stage2.cpp" />
-    <ClCompile Include="test_sa3dport_stage3.cpp" />
-    <ClCompile Include="test_sa3dport_stage4.cpp" />
-    <ClCompile Include="test_sa3dport_stage5.cpp" />
+    <ClCompile Include="test_spice_modeling_stage1.cpp" />
+    <ClCompile Include="test_spice_modeling_stage2.cpp" />
+    <ClCompile Include="test_spice_modeling_stage3.cpp" />
+    <ClCompile Include="test_spice_modeling_stage4.cpp" />
+    <ClCompile Include="test_spice_modeling_stage5.cpp" />
     <ClCompile Include="test_spiceroot.cpp" />
     <ClCompile Include="test_spice_grinder_cli.cpp" />
     <ClCompile Include="test_spice_mix_documents.cpp" />

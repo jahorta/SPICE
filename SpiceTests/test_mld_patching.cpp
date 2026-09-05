@@ -1,4 +1,8 @@
 #include "../SpiceMLD/SpiceMLD.h"
+#include "../SpiceMLD/Model/MldGroundEditing.h"
+#include "../SpiceMLD/Model/TriangleMetadata.h"
+#include "../SpiceMLD/Patching/TriangleMetadataPatcher.h"
+#include "../SpiceMLD/Parsing/MldParser.h"
 #include "../SpiceMLD/Parsing/GobjParser.h"
 #include "../SpiceMLD/Parsing/GrndParser.h"
 #include "../Compression/Aklz.h"

@@ -16,14 +16,10 @@ SPICE is the Skies Package Interchange and Content Encoder, a Windows C++20 tool
 
 - Windows with the Windows SDK and MSVC v145 toolchain.
 - Qt 6.10.3 for MSVC 2022 x64, registered with Qt VS Tools as `6.10.3_msvc2022_64`.
-- .NET 8 SDK for `SA3DRefRunner`.
-- Git submodules initialized for SA3D.Modeling.
 
 From the repository root, initialize dependencies and run the solution build from an elevated Developer PowerShell:
 
 ```powershell
-git submodule update --init --recursive
-
 & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" SPICE.sln /p:Configuration=Debug /p:Platform=x64
 ```
 
@@ -63,7 +59,7 @@ Support varies by format. Some formats have semantic editors and writers, while 
 | `.bin`           | `SpiceBin`    | Provides endian-aware read-only probing for known indexed HRS/UI families; `.bin` is not treated as one universal format.          |
 | `.ect`           | `SpiceEct`    | Parses, edits, and writes Dreamcast and GameCube encounter tables through a platform-neutral model.                                |
 | `.gvm` / `.gvr`  | `SpiceGvm`    | Parses GVM archives and decodes, creates, or edits GVR textures with PNG interchange.                                              |
-| `.mld`           | `SpiceMLD`    | Parses GameCube and Dreamcast scene/model containers, exports inspection data, and writes supported geometry and texture surfaces. |
+| `.mld`           | `SpiceMLD`    | Imports GameCube and Dreamcast containers into a platform-neutral `MldDocument`, validates edits, writes explicit targets, and projects Blender IR. |
 | `.mlk`           | `SpiceMlk`    | Provides endian-aware read-only battle-resource inspection, corpus reports, and embedded-MLD Blender IR exports.                   |
 | `.mll`           | `SpiceMll`    | Parses big- and little-endian member archives and conservatively rebuilds them in their source endian.                             |
 | `.pvm` / `.pvr`  | `SpicePvm`    | Parses, decodes, and encodes Dreamcast texture archives and textures.                                                              |
@@ -80,9 +76,8 @@ Support varies by format. Some formats have semantic editors and writers, while 
 | `SpiceRack`     | Qt desktop interface for inspecting ECT, MLD, and paired SST/SML documents and editing standalone or embedded GVR/PVR textures. |
 | `SpiceMix`      | Frontend-neutral operation and editable-document layer shared by SpiceGrinder and SpiceRack.                              |
 | `SpiceRoot`     | Common endian, alignment, FourCC, and binary I/O primitives.                                                              |
-| `Sa3Dport`      | C++ port of the SA3D model and animation functionality used by SPICE.                                                     |
+| `SpiceModeling` | Read-only C++ model and motion documents plus the supported Skies of Arcadia block codecs; editing is intentionally disabled in this release. |
 | `SpiceTests`    | Central GoogleTest-based automated test suite.                                                                            |
-| `SA3DRefRunner` | .NET reference bridge used to compare SPICE behavior with SA3D.Modeling.                                                  |
 
 ## Documentation
 
@@ -94,7 +89,7 @@ Support varies by format. Some formats have semantic editors and writers, while 
 
 SPICE incorporates or builds on work from:
 
-- [SA3D.Modeling](https://github.com/X-Hax/SA3D.Modeling) and the X-Hax contributors, which provide the upstream model and animation reference for `Sa3Dport`.
+- [SA3D.Modeling](https://github.com/X-Hax/SA3D.Modeling) and the X-Hax contributors, which provide the upstream model and animation reference for `SpiceModeling`.
 - SALSA, which provides reference metadata and terminology for SCT instructions.
 - ALX 5.0.0, which provides the compatibility target for selected CSV tables.
 - LodePNG, used for PNG encoding and decoding.
