@@ -147,6 +147,7 @@
     <ClCompile Include="test_sct_opcode_schema.cpp" />
     <ClCompile Include="test_sct_opcode_parameter_facts.cpp" />
     <ClCompile Include="test_sct_performance.cpp" />
+    <ClCompile Include="test_sct_parser_diagnostics.cpp" />
     <ClCompile Include="test_sct_real_fixtures.cpp" />
     <ClCompile Include="test_sct_roundtrip.cpp" />
     <ClCompile Include="test_sct_scpt_v2.cpp" />
